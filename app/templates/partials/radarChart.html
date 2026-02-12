@@ -1,0 +1,101 @@
+{% set chart = radar_chart if radar_chart is defined else {} %}
+{% set radar_id = chart.id|default('radarChartCanvas') %}
+
+<h2 class="h5 mb-3">{{ chart.title|default('Performance Radar') }}</h2>
+<div class="radar-chart ratio ratio-1x1">
+  <canvas id="{{ radar_id }}"></canvas>
+</div>
+
+<script id="{{ radar_id }}-data" type="application/json">
+  {{ chart|default({})|tojson }}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+  integrity="sha384-zuvR4P7b6xDPjmpBoBPXaGNsq4CPGK/c/pXHiY/VKwxLBzME2YkdE+5EYXPLkZXl" crossorigin="anonymous"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const dataEl = document.getElementById('{{ radar_id }}-data');
+    if (!dataEl) return;
+
+    let chartInput = {};
+    try {
+      chartInput = JSON.parse(dataEl.textContent || '{}') || {};
+    } catch (error) {
+      console.warn('Invalid radar chart input', error);
+    }
+
+    if (!Array.isArray(chartInput.labels) || !chartInput.labels.length) {
+      chartInput.labels = ['U', 'R', 'D', 'L'];
+    }
+
+    if (!Array.isArray(chartInput.datasets) || !chartInput.datasets.length) {
+      chartInput.datasets = [
+        { label: 'Sample Input', values: [2, 3, 5, 1], max: 5 }
+      ];
+    }
+
+    if (typeof Chart === 'undefined') {
+      console.warn('Chart.js is required for radarChart partial');
+      return;
+    }
+
+    const palette = [
+      '#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545', '#fd7e14',
+      '#ffc107', '#198754', '#20c997', '#0dcaf0', '#adb5bd', '#343a40'
+    ];
+
+    const toRgba = (hex, alpha) => {
+      const parsed = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!parsed) return 'rgba(13,110,253,0.2)';
+      const r = parseInt(parsed[1], 16);
+      const g = parseInt(parsed[2], 16);
+      const b = parseInt(parsed[3], 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const datasets = chartInput.datasets.map((dataset, index) => {
+      const baseColor = palette[index % palette.length];
+      return {
+        label: dataset.label || `Series ${index + 1}`,
+        data: dataset.values || [],
+        backgroundColor: toRgba(baseColor, 0.2),
+        borderColor: baseColor,
+        pointBackgroundColor: baseColor,
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: baseColor,
+        borderWidth: 2,
+        fill: true
+      };
+    });
+
+    const ctx = document.getElementById(chartInput.id || '{{ radar_id }}');
+    if (!ctx) {
+      return;
+    }
+
+    new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: chartInput.labels,
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          r: {
+            beginAtZero: true,
+            ticks: {
+              suggestedMax: chartInput.max || 5,
+              stepSize: chartInput.step || 1
+            }
+          }
+        },
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+  });
+</script>

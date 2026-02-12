@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %} Home | Flask Prototype{% endblock %}
+
+{% block breadcrumbs %}
+{% include "partials/breadcrumbs.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="row row-cols-1 row-cols-md-2 g-3">
+  <div class="col">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="card-title h3 mb-3">Welcome</h1>
+        <p class="card-text">
+          This starter page is running on Flask {{ flask_version }}.
+        </p>
+        <p class="text-muted small mb-0">
+          Last refreshed: {{ timestamp.strftime('%B %d, %Y %I:%M %p') }}
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="card-title h3 mb-3"> What is this?</div>
+        <p class="card-text">This is me playing around with html/bootsrtap trying to put together a prototype UI to see
+          if
+          we can make this look good easy</p>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+
+        {% include "partials/playerCard.html" %}
+  </div>
+</div>
+{% endblock %}
