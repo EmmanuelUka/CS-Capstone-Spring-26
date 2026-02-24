@@ -40,6 +40,6 @@ Follow these steps whenever you need new dashboards or stats so each scout can t
    ```
 4. **Run the Flask app**:
    ```bash
-   python run.py
+   flask --debug run
    ```
 5. **Visit the dashboard** at `http://127.0.0.1:5000/` and interact with the Vue cards. Drag-and-drop order is stored in `localStorage`, so each browser maintains its layout automatically.
