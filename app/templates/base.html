@@ -1,28 +1,27 @@
 <!doctype html>
 <html lang="en">
 
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}Flask Prototype{% endblock %}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
-</head>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Flask Prototype{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
 
 <body class="bg-light">
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container d-flex flex-column align-items-start py-2">
-      <div class="d-flex align-items-center gap-2">
-        <button class="navbar-toggler d-flex align-items-center justify-content-center border-0 shadow-none"
-          type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu"
-          aria-label="Open navigation menu">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <a class="navbar-brand mb-0" href="/">FlaskPrototypeUI</a>
-      </div>
-      <div class="mt-1 w-100">
-      </div>
+  <nav class="navbar navbar-expand-lg navbar-dark hashmark-navbar">
+    <div class="container d-flex align-items-center gap-2 justify-content-start py-2">
+      <button class="navbar-toggler d-flex align-items-center justify-content-center border-0 shadow-none"
+        type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu"
+        aria-label="Open navigation menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <a class="navbar-brand mb-0 bebas-neue-regular" href="/">Hashmark Scout</a>
     </div>
   </nav>
 
@@ -35,21 +34,15 @@
       
       <nav class="nav flex-column gap-2">
         <a class="nav-link text-white" href="/">Dashboard</a>
-        <a class="nav-link text-white-50" href="#">Reports</a>
-        <a class="nav-link text-white-50" href="#">Settings</a>
-        <a class="nav-link text-white-50" href="#">Support</a>
+        <a class="nav-link text-white-50" href="#">Player Board</a>
+        <a class="nav-link text-white-50" href="#">Visits</a>
+        <a class="nav-link text-white-50" href="#">Analytics</a>
       </nav>
     </div>
   </div>
   
   <main class="container py-4">
     {% block breadcrumbs %}{% endblock %}
-    <header class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h1 class="h4 mb-0">{{ page_title|default('Flask Prototype') }}</h1>
-        <p class="text-muted mb-0">Starter interface powered by Bootstrap 5</p>
-      </div>
-    </header>
     {% block content %}{% endblock %}
   </main>
 

@@ -10,22 +10,22 @@ def home():
     now = datetime.now()
     radar_chart = {
         "id": "radarChartCanvas",
-        "title": "Skills Radar",
-        "labels": ["Backend", "Frontend", "UX", "DevOps", "Testing"],
+        "title": "Player Comparison",
+        "labels": ["Finishing", "Playmaking", "Agility", "Mentality", "Defense"],
         "datasets": [
-            {"label": "Current", "values": [3, 4, 2, 4, 3], "max": 5},
-            {"label": "Target", "values": [4, 5, 4, 5, 4], "max": 5},
+            {"label": "Player A", "values": [4, 5, 4, 4, 3], "max": 5},
+            {"label": "Player B", "values": [3, 4, 3, 5, 2], "max": 5},
         ],
         "step": 1,
         "max": 5,
     }
     return render_template(
         "home.html",
-        page_title="Dashboard",
+        page_title="Hashmark Scout",
         breadcrumbs=[
-            {"label": "Home", "url": "/"},
-            {"label": "Second Page", "url": "/"},
-            {"label": "third page", "url": "/"}
+            {"label": "Hashmark", "url": "/"},
+            {"label": "Highlights", "url": "/"},
+            {"label": "Visit Logs", "url": "/"}
         ],
         timestamp=now.isoformat(),
         flask_version=flask_version,

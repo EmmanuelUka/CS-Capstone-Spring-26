@@ -1,9 +1,20 @@
+:root {
+  --hm-navy: #2e3c70;
+  --hm-gold: #dbad3e;
+  --hm-dark: #111226;
+  --hm-light: #f5f6ff;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
 body {
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--hm-light);
+  color: var(--hm-dark);
 }
 
 .card-title {
-  color: #0d6efd;
+  color: var(--hm-navy);
 }
 
 .breadcrumb {
@@ -15,14 +26,92 @@ body {
   padding-left: 0.1rem;
 }
 
+.hashmark-navbar {
+  background: var(--hm-navy);
+  border-bottom: 1px solid rgba(46, 60, 112, 0.2);
+}
+.hashmark-navbar .navbar-brand {
+  font-family: "Bebas Neue Pro", "Bebas Neue", cursive;
+  color: var(--hm-gold);
+  letter-spacing: 0.08em;
+  font-size: 2em;
+  line-height: 1;
+}
+
+.hashmark-navbar .nav-link {
+  color: #fff;
+}
+
+.hashmark-navbar .nav-link.text-white-50 {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.hashmark-navbar .navbar-toggler {
+  padding: 0.2rem 0.6rem;
+}
+
+.offcanvas.offcanvas-start.text-bg-dark {
+  background: var(--hm-navy);
+}
+
+.offcanvas-body .nav-link {
+  color: #fff;
+}
+
+.bebas-neue-regular {
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.offcanvas-body .nav-link:hover,
+.offcanvas-body .nav-link.active {
+  color: var(--hm-gold);
+}
+
 .card-grid .card {
   overflow: hidden;
   position: relative;
+  border: 1px solid rgba(46, 60, 112, 0.12);
+  background: #fff;
+}
+
+.card-holder {
+  cursor: grab;
+  transition: transform 0.18s ease, margin 0.18s ease;
+  position: relative;
+}
+
+.card-holder:active {
+  cursor: grabbing;
+}
+
+.card-holder.dragging {
+  z-index: 5;
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(46, 60, 112, 0.2);
+}
+
+.card-holder.drag-over {
+  transform: translateY(-6px);
+}
+
+.card-holder.drag-over .card {
+  box-shadow: 0 10px 26px rgba(46, 60, 112, 0.25);
+  border-color: rgba(46, 60, 112, 0.4);
+}
+
+.hashmark-badge {
+  background: var(--hm-gold);
+  color: var(--hm-navy);
+  font-weight: 600;
+  border: 1px solid rgba(46, 60, 112, 0.25);
 }
 
 .radar-card {
   display: flex;
   width: 100%;
+  margin-bottom: 0.5rem;
 }
 
 .radar-wrap {
@@ -38,7 +127,7 @@ body {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  border: 1px solid rgba(13, 110, 253, 0.2);
+  border: 1px solid rgba(46, 60, 112, 0.3);
 }
 
 .avatar-ring {
@@ -61,10 +150,77 @@ body {
   color: #0a0a0a !important;
 }
 
+.player-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-profile .player-top {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.player-profile .player-meta {
+  flex: 1;
+}
+
+.player-profile .player-meta p {
+  color: rgba(46, 60, 112, 0.8);
+}
+
+.player-profile .avatar-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+
+.player-profile .avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.player-profile .player-meta h3 {
+  color: var(--hm-navy);
+}
+
 .radar-wrap canvas,
 .radar-chart canvas {
   width: 100% !important;
   height: 100% !important;
   max-height: 240px !important;
   display: block;
+}
+
+.card-drag-handle {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(46, 60, 112, 0.08);
+  border: 1px solid rgba(46, 60, 112, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: rgba(46, 60, 112, 0.8);
+  user-select: none;
+}
+
+.drag-preview {
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(46, 60, 112, 0.25);
+  opacity: 1 !important;
+  border-radius: 12px;
+  transform: scale(1.01);
 }

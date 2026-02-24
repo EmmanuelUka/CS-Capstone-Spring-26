@@ -39,10 +39,12 @@ const RadarChart = defineComponent({
     };
 
     const renderChart = () => {
-      const datasets = (config.datasets || []).map((dataset, index) => {
+      const rawDatasets = config.datasets || [];
+      const showLegend = rawDatasets.length > 1;
+      const datasets = rawDatasets.map((dataset, index) => {
         const baseColor = palette[index % palette.length];
         return {
-          label: dataset.label || `Series ${index + 1}`,
+          label: showLegend ? dataset.label || `Series ${index + 1}` : "",
           data: dataset.values || [],
           backgroundColor: toRgba(baseColor, 0.2),
           borderColor: baseColor,
@@ -74,7 +76,7 @@ const RadarChart = defineComponent({
               },
             },
           },
-          plugins: { legend: { position: "bottom" } },
+          plugins: { legend: { display: showLegend, position: "bottom" } },
         },
       });
     };
@@ -105,7 +107,84 @@ const InfoCard = defineComponent({
 const CardGrid = defineComponent({
   name: "CardGrid",
   components: { RadarChart },
+  emits: ["reorder"],
   props: { cards: { type: Array, default: () => [] } },
+  setup(_, { emit }) {
+    const dragIndex = ref(null);
+    const dragOverIndex = ref(null);
+    const dragImageEl = ref(null);
+
+    const onDragStart = (event, index) => {
+      dragIndex.value = index;
+      dragOverIndex.value = index;
+      if (event.dataTransfer) {
+        event.dataTransfer.setData("text/plain", String(index));
+        event.dataTransfer.effectAllowed = "move";
+      }
+      const target = event.currentTarget;
+      if (target) {
+        const clone = target.cloneNode(true);
+        if (clone instanceof HTMLElement) {
+          clone.classList.add("drag-preview");
+          clone.style.position = "absolute";
+          clone.style.top = "-9999px";
+          clone.style.left = "-9999px";
+          clone.style.width = `${target.offsetWidth}px`;
+          clone.style.height = `${target.offsetHeight}px`;
+          clone.style.zIndex = "9999";
+          document.body.appendChild(clone);
+          dragImageEl.value = clone;
+          event.dataTransfer?.setDragImage(clone, clone.offsetWidth / 2, clone.offsetHeight / 2);
+        }
+      }
+    };
+
+    const onDrop = (event, index) => {
+      event.preventDefault();
+      dragOverIndex.value = null;
+      if (dragIndex.value !== null && dragIndex.value !== index) {
+        emit("reorder", { from: dragIndex.value, to: index });
+      }
+    };
+
+    const onDragEnd = () => {
+      dragIndex.value = null;
+      dragOverIndex.value = null;
+      if (dragImageEl.value) {
+        document.body.removeChild(dragImageEl.value);
+        dragImageEl.value = null;
+      }
+    };
+
+    const onDragOver = (event, index) => {
+      event.preventDefault();
+      dragOverIndex.value = index;
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+    };
+
+    const onDragEnter = (index) => {
+      dragOverIndex.value = index;
+    };
+
+    const onDragLeave = (index) => {
+      if (dragOverIndex.value === index) {
+        dragOverIndex.value = null;
+      }
+    };
+
+    return {
+      onDragStart,
+      onDrop,
+      onDragEnd,
+      onDragOver,
+      onDragEnter,
+      onDragLeave,
+      dragIndex,
+      dragOverIndex,
+    };
+  },
   template: "#tpl-card-grid",
 });
 
@@ -122,17 +201,43 @@ const App = defineComponent({
     const timestamp = ref(parsed.timestamp || new Date().toISOString());
     const radarChart = ref(parsed.radar_chart || {
       id: "radarChartCanvas",
-      title: "Performance Radar",
-      labels: ["U", "R", "D", "L"],
-      datasets: [{ label: "Sample", values: [2, 3, 4, 1], max: 5 }],
+      title: "Player Comparison",
+      labels: ["Finishing", "Playmaking", "Agility", "Mentality", "Defense"],
+      datasets: [
+        { label: "Player A", values: [4, 5, 4, 4, 3], max: 5 },
+        { label: "Player B", values: [3, 4, 3, 5, 2], max: 5 },
+      ],
       step: 1,
       max: 5,
     });
 
     const refreshedAt = computed(() => formatTimestamp(timestamp.value));
-    const heroText = computed(() => `This starter page now runs on Vue 3 + Flask ${flaskVersion.value}.`);
+    const heroText = computed(
+      () => `Hashmark keeps your college football recruiting intel and analytics in sync with Flask ${flaskVersion.value}.`
+    );
 
-    const cardWall = ref([
+    const playerChart = {
+      id: "playerRadarChart",
+      title: "Season Snapshot",
+      labels: ["Finishing", "Playmaking", "Agility", "Mentality", "Defense"],
+      datasets: [{ label: "2026 Season", values: [4, 5, 4, 4, 3], max: 5 }],
+      step: 1,
+      max: 5,
+    };
+
+    const defaultCards = [
+      {
+        id: "player-profile",
+        type: "player",
+        title: "Player Profile",
+        badge: "Stars",
+        body: "A two-way forward who can finish, create, and help organize from the wings.",
+        name: "Jordan Miles",
+        role: "Wing Forward / Playmaker",
+        avatar:
+          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='%23e9ecef'/%3E%3Ccircle cx='60' cy='40' r='26' fill='%23adb5bd'/%3E%3Cpath d='M20 98c0-22 18-40 40-40s40 18 40 40z' fill='%23adb5bd'/%3E%3C/svg%3E",
+        chart: playerChart,
+      },
       {
         id: "skills-radar",
         type: "radar",
@@ -142,23 +247,63 @@ const App = defineComponent({
         chart: radarChart.value,
       },
       {
-        id: "backend-tasks",
+        id: "visit-schedule",
         type: "list",
-        title: "Backend Tasks",
+        title: "Upcoming Visits",
         items: [
-          { label: "API contracts", value: "Done" },
-          { label: "Auth flow", value: "In review" },
-          { label: "Logging", value: "Pending" },
+          { label: "Northwestern Visit", value: "Confirmed" },
+          { label: "Spring Camp", value: "Pending" },
+          { label: "Highlight Tape Drop", value: "Processing" },
         ],
       },
       {
-        id: "deploy-status",
+        id: "recruit-score",
         type: "stat",
-        title: "Deploys this week",
-        value: "5",
-        badge: "CI/CD",
+        title: "Scout Wins",
+        value: "12",
+        badge: "Season",
       },
-    ]);
+    ];
+
+    const cardOrderStorageKey = "hashmark-card-order";
+
+    const getSavedOrder = () => {
+      if (typeof window === "undefined") return null;
+      try {
+        return JSON.parse(window.localStorage.getItem(cardOrderStorageKey) || "null");
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const buildCardsFromOrder = () => {
+      const saved = getSavedOrder();
+      if (!Array.isArray(saved)) return [...defaultCards];
+      const cardMap = new Map(defaultCards.map((card) => [card.id, card]));
+      const ordered = saved.map((id) => cardMap.get(id)).filter(Boolean);
+      const remaining = defaultCards.filter((card) => !saved.includes(card.id));
+      return [...ordered, ...remaining];
+    };
+
+    const cardWall = ref(buildCardsFromOrder());
+
+    const persistOrder = () => {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem(cardOrderStorageKey, JSON.stringify(cardWall.value.map((card) => card.id)));
+    };
+
+    const moveCard = ({ from, to }) => {
+      const updated = [...cardWall.value];
+      const [moved] = updated.splice(from, 1);
+      updated.splice(to, 0, moved);
+      cardWall.value = updated;
+      persistOrder();
+    };
+
+    const addCard = (card) => {
+      cardWall.value = [...cardWall.value, card];
+      persistOrder();
+    };
 
     onMounted(() => {
       document.title = `${pageTitle.value} | Vue Dashboard`;
@@ -171,30 +316,16 @@ const App = defineComponent({
       radarChart,
       refreshedAt,
       heroText,
+      cardWall,
+      moveCard,
+      addCard,
     };
   },
   template: `
     <div class="d-flex flex-column gap-3">
       <Breadcrumbs :items="breadcrumbs" />
 
-      <header class="d-flex justify-content-between align-items-center mb-1">
-        <div>
-          <h1 class="h4 mb-0">{{ pageTitle }}</h1>
-          <p class="text-muted mb-0">Starter interface powered by Vue 3 + Bootstrap 5</p>
-        </div>
-        <span class="badge text-bg-primary">Vue</span>
-      </header>
-
-      <div class="row row-cols-1 row-cols-md-2 g-3">
-        <div class="col">
-          <InfoCard title="Welcome" :body="heroText" :meta="'Last refreshed: ' + refreshedAt" />
-        </div>
-        <div class="col">
-          <InfoCard title="What is this?" body="A Vue-powered dashboard scaffold you can extend with components, charts, and API data." />
-        </div>
-      </div>
-
-      <CardGrid :cards="cardWall" />
+      <CardGrid :cards="cardWall" @reorder="moveCard" />
     </div>
   `,
 });

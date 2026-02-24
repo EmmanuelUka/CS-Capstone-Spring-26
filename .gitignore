@@ -1,0 +1,36 @@
+## Python / Flask
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+dist/
+build/
+instance/
+*.sqlite3
+*.db
+.pytest_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+
+# Node / Vue.js
+node_modules/
+dist/
+public/dist/
+*.log
+
+# Local env files
+.env
+.env.*
+
+# Editor / OS
+.DS_Store
+Thumbs.db

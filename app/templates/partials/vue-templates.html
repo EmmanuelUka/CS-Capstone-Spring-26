@@ -37,15 +37,48 @@
 <script type="text/x-template" id="tpl-card-grid">
   <section class="card-grid">
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-      <div v-for="card in cards" :key="card.id" class="col">
+      <div
+        v-for="(card, index) in cards"
+        :key="card.id"
+        class="col card-holder"
+        :class="{ dragging: dragIndex === index, 'drag-over': dragOverIndex === index }"
+        draggable="true"
+        @dragstart="onDragStart($event, index)"
+        @dragenter.prevent="onDragEnter(index)"
+        @dragleave="onDragLeave(index)"
+        @dragover="onDragOver($event, index)"
+        @drop="onDrop($event, index)"
+        @dragend="onDragEnd"
+      >
         <div class="card h-100 shadow-sm border-0">
           <div class="card-body d-flex flex-column gap-3">
             <div class="d-flex align-items-center justify-content-between">
-              <h2 class="h6 mb-0">{{ card.title }}</h2>
-              <span v-if="card.badge" class="badge text-bg-secondary">{{ card.badge }}</span>
+              <div class="d-flex align-items-center gap-2">
+                <span class="card-drag-handle" aria-hidden="true">≡</span>
+                <h2 class="h6 mb-0">{{ card.title }}</h2>
+              </div>
+              <span v-if="card.badge" class="badge hashmark-badge">{{ card.badge }}</span>
             </div>
 
-            <p v-if="card.body" class="text-muted mb-0">{{ card.body }}</p>
+            <p v-if="card.body && card.type !== 'player'" class="text-muted mb-0">{{ card.body }}</p>
+
+            <div v-if="card.type === 'player'" class="player-profile w-100">
+              <div class="player-top">
+                <div class="player-meta">
+                  <h3 class="h5 mb-1 fw-semibold">{{ card.name }}</h3>
+                  <p v-if="card.body" class="text-muted small mb-1">{{ card.body }}</p>
+                  <p class="text-muted small mb-0">{{ card.role }}</p>
+                </div>
+                <div class="avatar-ring mb-0">
+                  <img :src="card.avatar" :alt="card.name + ' portrait'" class="avatar" />
+                </div>
+              </div>
+              <div class="radar-card mt-3">
+                <div class="p-2 rounded bg-light radar-wrap w-100 mx-auto">
+                  <RadarChart :chart="card.chart" />
+                </div>
+              </div>
+            </div>
 
             <div v-if="card.type === 'radar'" class="radar-card">
               <div class="p-2 rounded bg-light radar-wrap w-100">

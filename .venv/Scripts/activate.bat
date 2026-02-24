@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=E:\Desktop\Code Pen\PP Landing\CS-Capstone-Spring-26\.venv
+set VIRTUAL_ENV=C:\Users\ecroo\OneDrive\Documents\GitHub\CS-Capstone-Spring-26\.venv
 
 if not defined PROMPT set PROMPT=$P$G
 
