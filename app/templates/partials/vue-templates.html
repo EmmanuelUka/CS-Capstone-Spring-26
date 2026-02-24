@@ -1,0 +1,71 @@
+{% raw %}
+<!-- Vue component templates -->
+<script type="text/x-template" id="tpl-breadcrumbs">
+  <nav v-if="items.length" aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li v-for="(item, index) in items"
+          :key="item.label + index"
+          class="breadcrumb-item"
+          :class="{ active: index === items.length - 1 }">
+        <template v-if="index === items.length - 1">
+          {{ item.label }}
+        </template>
+        <template v-else>
+          <a :href="item.url || '#'">{{ item.label }}</a>
+        </template>
+      </li>
+    </ol>
+  </nav>
+</script>
+
+<script type="text/x-template" id="tpl-radar-chart">
+  <div class="radar-chart ratio ratio-1x1">
+    <canvas :id="chart.id || 'radarChartCanvas'"></canvas>
+  </div>
+</script>
+
+<script type="text/x-template" id="tpl-info-card">
+  <div class="card shadow-sm h-100">
+    <div class="card-body">
+      <h2 class="card-title h4 mb-3">{{ title }}</h2>
+      <p class="card-text">{{ body }}</p>
+      <p v-if="meta" class="text-muted small mb-0">{{ meta }}</p>
+    </div>
+  </div>
+</script>
+
+<script type="text/x-template" id="tpl-card-grid">
+  <section class="card-grid">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+      <div v-for="card in cards" :key="card.id" class="col">
+        <div class="card h-100 shadow-sm border-0">
+          <div class="card-body d-flex flex-column gap-3">
+            <div class="d-flex align-items-center justify-content-between">
+              <h2 class="h6 mb-0">{{ card.title }}</h2>
+              <span v-if="card.badge" class="badge text-bg-secondary">{{ card.badge }}</span>
+            </div>
+
+            <p v-if="card.body" class="text-muted mb-0">{{ card.body }}</p>
+
+            <div v-if="card.type === 'radar'" class="radar-card">
+              <div class="p-2 rounded bg-light radar-wrap w-100">
+                <RadarChart :chart="card.chart" />
+              </div>
+            </div>
+
+            <div v-else-if="card.type === 'stat'" class="display-6 fw-semibold">{{ card.value }}</div>
+
+            <div v-else-if="card.type === 'list'">
+              <ul class="list-unstyled mb-0 small">
+                <li v-for="(item, idx) in card.items" :key="idx" class="d-flex justify-content-between py-1 border-bottom">
+                  <span>{{ item.label }}</span><span class="fw-semibold">{{ item.value }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</script>
+{% endraw %}

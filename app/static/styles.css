@@ -15,7 +15,56 @@ body {
   padding-left: 0.1rem;
 }
 
+.card-grid .card {
+  overflow: hidden;
+  position: relative;
+}
+
+.radar-card {
+  display: flex;
+  width: 100%;
+}
+
+.radar-wrap {
+  width: 100%;
+  max-width: 360px;
+  height: 220px;
+  max-height: 240px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgba(13, 110, 253, 0.2);
+}
+
+.avatar-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  box-shadow: 0 6px 20px rgba(13, 110, 253, 0.18);
+}
+
+.player-card {
+  background: #ffffff;
+}
+
+.player-card .card-body {
+  color: #0a0a0a !important;
+}
+
+.player-card .fw-bold,
+.player-card .text-dark {
+  color: #0a0a0a !important;
+}
+
+.radar-wrap canvas,
 .radar-chart canvas {
   width: 100% !important;
   height: 100% !important;
+  max-height: 240px !important;
+  display: block;
 }
