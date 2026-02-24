@@ -23,3 +23,23 @@ This repo renders each modular “card” inside `app/static/vue-app.js` and `ap
 6. **Advanced helpers** – call the `addCard(card)` helper from `setup()` if you want to create cards dynamically at runtime (e.g., from fetched data); the helper appends the card, re-renders, and persists the order as well.
 
 Follow these steps whenever you need new dashboards or stats so each scout can tailor their board.
+
+# How to set up the dev environment
+
+1. **Create a virtual environment** (if you do not already have one):
+   ```bash
+   python -m venv .venv
+   ```
+2. **Activate the venv** (Windows example shown):
+   ```powershell
+   .venv\\Scripts\\activate
+   ```
+3. **Install Python dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Run the Flask app**:
+   ```bash
+   python run.py
+   ```
+5. **Visit the dashboard** at `http://127.0.0.1:5000/` and interact with the Vue cards. Drag-and-drop order is stored in `localStorage`, so each browser maintains its layout automatically.
