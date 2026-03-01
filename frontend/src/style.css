@@ -154,3 +154,107 @@ body {
   text-align: center;
   padding: 30px;
 }
+
+/* ----------------------------
+   Simple in-app navigation
+---------------------------- */
+.topbar{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:18px;
+  padding-bottom:18px;
+  border-bottom:1px solid rgba(255,255,255,0.15);
+}
+
+.topbar-title{
+  font-size:14px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  opacity:0.7;
+}
+
+.topbar-sub{
+  margin-top:6px;
+  font-size:14px;
+  opacity:0.9;
+}
+
+.topbar-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:flex-end;
+}
+
+.secondary-btn.compact{
+  margin-top:0;
+  padding:8px 12px;
+  border-radius:10px;
+}
+
+/* ----------------------------
+   Home page cards
+---------------------------- */
+.muted{
+  color: rgba(255,255,255,0.7);
+}
+
+.home-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:14px;
+  margin-top:18px;
+}
+
+.home-card{
+  border:1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04);
+  border-radius:16px;
+  padding:16px;
+}
+
+.home-card h3{
+  margin:0 0 6px 0;
+  font-size:16px;
+}
+
+.home-card p{
+  margin:0 0 12px 0;
+  font-size:14px;
+}
+
+@media (max-width: 720px){
+  .home-grid{ grid-template-columns: 1fr; }
+}
+
+/* optional: make "danger" buttons stand out slightly */
+.danger-btn{
+  border-color: rgba(255,120,120,0.6);
+}
+.pill{
+  display:inline-flex;
+  align-items:center;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  font-size:12px;
+  opacity:0.9;
+}
+
+/* ----------------------------
+   Login Error Alert
+---------------------------- */
+
+.error-alert {
+  margin-bottom: 15px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 80, 80, 0.12);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  color: #ff6b6b;
+  font-size: 14px;
+  font-weight: 500;
+}
