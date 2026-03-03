@@ -174,6 +174,46 @@ const CardGrid = defineComponent({
       }
     };
 
+    const summarizeCard = async (card) => {
+      if (!card) return;
+      card.status = "loading";
+      card.error = "";
+      card.analysis = null;
+      try {
+        const response = await fetch("/api/generate-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: card.query || "",
+            name: card.playerName || "",
+            position: card.playerPosition || "",
+          }),
+        });
+        if (!response.ok) {
+          throw new Error("Server returned an error");
+        }
+        card.analysis = await response.json();
+        card.status = "done";
+      } catch (error) {
+        card.status = "error";
+        card.error = error instanceof Error ? error.message : "Unable to summarize text";
+      }
+    };
+
+    const copySummary = async (card) => {
+      const text = card?.analysis?.summary;
+      if (!text || typeof navigator === "undefined" || !navigator.clipboard) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        card.copyStatus = "copied";
+        setTimeout(() => {
+          card.copyStatus = "";
+        }, 1400);
+      } catch (err) {
+        card.copyStatus = "failed";
+      }
+    };
+
     return {
       onDragStart,
       onDrop,
@@ -183,6 +223,8 @@ const CardGrid = defineComponent({
       onDragLeave,
       dragIndex,
       dragOverIndex,
+      summarizeCard,
+      copySummary,
     };
   },
   template: "#tpl-card-grid",
@@ -262,6 +304,20 @@ const App = defineComponent({
         title: "Scout Wins",
         value: "12",
         badge: "Season",
+      },
+      {
+        id: "text-analyzer",
+        type: "analysis",
+        title: "Evaluation Summary",
+        badge: "Server",
+        body: "",
+        query: "",
+        status: "idle",
+        analysis: null,
+        error: "",
+        playerName: "",
+        playerPosition: "",
+        copyStatus: "",
       },
     ];
 

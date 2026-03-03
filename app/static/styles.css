@@ -77,13 +77,8 @@ body {
 }
 
 .card-holder {
-  cursor: grab;
   transition: transform 0.18s ease, margin 0.18s ease;
   position: relative;
-}
-
-.card-holder:active {
-  cursor: grabbing;
 }
 
 .card-holder.dragging {
@@ -203,6 +198,31 @@ body {
   display: block;
 }
 
+.analysis-card .form-control {
+  min-height: 75px;
+  resize: vertical;
+}
+
+.analysis-card .form-control-sm {
+  font-size: 0.85rem;
+  min-height: 1.5em;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.analysis-results {
+  background: #f8f9ff;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(46, 60, 112, 0.2);
+  padding: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.analysis-results .badge {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
 .card-drag-handle {
   width: 20px;
   height: 20px;
@@ -215,6 +235,11 @@ body {
   font-size: 0.8rem;
   color: rgba(46, 60, 112, 0.8);
   user-select: none;
+  cursor: grab;
+}
+
+.card-drag-handle:active {
+  cursor: grabbing;
 }
 
 .drag-preview {

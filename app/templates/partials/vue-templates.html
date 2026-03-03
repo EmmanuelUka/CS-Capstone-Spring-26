@@ -42,19 +42,24 @@
         :key="card.id"
         class="col card-holder"
         :class="{ dragging: dragIndex === index, 'drag-over': dragOverIndex === index }"
-        draggable="true"
-        @dragstart="onDragStart($event, index)"
         @dragenter.prevent="onDragEnter(index)"
         @dragleave="onDragLeave(index)"
         @dragover="onDragOver($event, index)"
         @drop="onDrop($event, index)"
-        @dragend="onDragEnd"
       >
         <div class="card h-100 shadow-sm border-0">
-          <div class="card-body d-flex flex-column gap-3">
+          <div class="card-body d-flex flex-column gap-2">
             <div class="d-flex align-items-center justify-content-between">
               <div class="d-flex align-items-center gap-2">
-                <span class="card-drag-handle" aria-hidden="true">≡</span>
+                <span
+                  class="card-drag-handle"
+                  aria-label="Drag card"
+                  role="button"
+                  tabindex="0"
+                  draggable="true"
+                  @dragstart="onDragStart($event, index)"
+                  @dragend="onDragEnd"
+                >≡</span>
                 <h2 class="h6 mb-0">{{ card.title }}</h2>
               </div>
               <span v-if="card.badge" class="badge hashmark-badge">{{ card.badge }}</span>
@@ -94,6 +99,69 @@
                   <span>{{ item.label }}</span><span class="fw-semibold">{{ item.value }}</span>
                 </li>
               </ul>
+            </div>
+            <div v-else-if="card.type === 'analysis'" class="analysis-card w-100">
+              <div class="row g-2">
+                <div class="col">
+                  <label class="form-label small text-uppercase fw-semibold">Player</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    v-model="card.playerName"
+                    :disabled="card.status === 'loading'"
+                    placeholder="Name"
+                  />
+                </div>
+                <div class="col">
+                  <label class="form-label small text-uppercase fw-semibold">Position</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    v-model="card.playerPosition"
+                    :disabled="card.status === 'loading'"
+                    placeholder="Role / Position"
+                  />
+                </div>
+              </div>
+              <label class="form-label small text-uppercase fw-semibold mt-3">Text to summarize</label>
+              <textarea
+                class="form-control"
+                v-model="card.query"
+                :disabled="card.status === 'loading'"
+                placeholder="Type or paste notes, scouting insights, or anything to summarize."
+              ></textarea>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <button
+                  class="btn btn-sm btn-primary d-flex align-items-center"
+                  :disabled="card.status === 'loading'"
+                  @click="summarizeCard(card)"
+                >
+                  <span
+                    v-if="card.status === 'loading'"
+                    class="spinner-border spinner-border-sm me-2"
+                    role="status"
+                    aria-hidden="true"
+                  ></span>
+                  {{ card.status === 'loading' ? "Summarizing…" : "Summarize" }}
+                </button>
+              </div>
+            <div v-if="card.analysis" class="analysis-results position-relative">
+              <div class="d-flex justify-content-between align-items-start">
+                <p class="fw-semibold small text-uppercase mb-1">Summary</p>
+                <button
+                  v-if="card.analysis.summary"
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm py-0 px-2"
+                  @click="copySummary(card)"
+                >
+                  Copy
+                </button>
+              </div>
+              <p class="mb-0 small text-dark">{{ card.analysis.summary }}</p>
+              <p v-if="card.copyStatus === 'copied'" class="text-success small mb-0 mt-1">Copied to clipboard</p>
+              <p v-else-if="card.copyStatus === 'failed'" class="text-danger small mb-0 mt-1">Copy failed</p>
+            </div>
+              <p v-if="card.error" class="text-danger small mb-0">{{ card.error }}</p>
             </div>
           </div>
         </div>
