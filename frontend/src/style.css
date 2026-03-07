@@ -1,10 +1,34 @@
+/* =========================================================
+   Fonts
+   ========================================================= */
+
+/* Imports the Bebas Neue font just for the main Hashmark title */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
+
+/* =========================================================
+   Global / Page Base
+   ========================================================= */
+
 body {
   margin: 0;
+
+  /* Main app font for everything except the title */
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
+
+  /* Dark blue gradient background behind the card */
+  background: linear-gradient(135deg, #0c1630, #143772);
+
+  /* Default text color across page */
   color: white;
 }
 
+
+/* =========================================================
+   Main Layout
+   ========================================================= */
+
+/* Full-page wrapper that centers the card on screen */
 .app-container {
   min-height: 100vh;
   display: flex;
@@ -13,16 +37,28 @@ body {
   padding: 30px;
 }
 
+/* Main content card that holds login/dashboard content */
 .card {
-  background: rgba(255, 255, 255, 0.05);
+  background: #143772;
+
+  /* Adds a glassy blurred look if anything transparent is behind it */
   backdrop-filter: blur(20px);
+
   border-radius: 18px;
   padding: 40px;
   width: 100%;
   max-width: 800px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+
+  /* Strong shadow to lift the card off the background */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
+
+/* =========================================================
+   Header / Branding
+   ========================================================= */
+
+/* Top header area containing logo + app title */
 .header {
   display: flex;
   align-items: center;
@@ -30,6 +66,7 @@ body {
   margin-bottom: 30px;
 }
 
+/* Logo box wrapper */
 .logo {
   width: 45px;
   height: 45px;
@@ -40,6 +77,7 @@ body {
   justify-content: center;
 }
 
+/* Makes logo image fill its box cleanly */
 .logo img {
   width: 100%;
   height: 100%;
@@ -47,214 +85,253 @@ body {
   display: block;
 }
 
+/* Main "Hashmark" title styling */
 .header h1 {
   margin: 0;
+  margin-bottom: -4px;
   font-size: 24px;
+  font-family: "Bebas Neue", sans-serif;
 }
 
+/* Subtitle under the title */
 .header p {
   margin: 0;
   font-size: 14px;
-  color: rgba(255,255,255,0.6);
+
+  /* Slightly faded white for less visual emphasis */
+  color: rgba(255, 255, 255, 0.6);
 }
 
-.login-section {
-  text-align: center;
-}
 
-.primary-btn {
-  background: linear-gradient(135deg, #6366f1, #06b6d4);
+/* =========================================================
+   Buttons
+   ========================================================= */
+
+/* Base button styling shared by all button types */
+.btn {
   border: none;
-  padding: 12px 20px;
   border-radius: 12px;
   color: white;
-  font-weight: 600;
   cursor: pointer;
   transition: 0.2s ease;
 }
 
+/* Main/high-priority button style
+   Used for actions like Sign in and Add */
+.primary-btn {
+  background: linear-gradient(135deg, #d99700, #efab00);
+  padding: 12px 20px;
+  font-weight: 600;
+}
+
+
+/* Hover effect for main buttons */
 .primary-btn:hover {
   transform: translateY(-2px);
   opacity: 0.9;
 }
 
+/* Secondary button style
+   Used for lower-priority actions like Refresh */
 .secondary-btn {
   margin-top: 15px;
   background: transparent;
-  border: 1px solid rgba(255,255,255,0.3);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 10px 16px;
   border-radius: 10px;
-  color: white;
-  cursor: pointer;
 }
 
+/* Hover effect for secondary buttons */
 .secondary-btn:hover {
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
+/* Danger button style
+   Used for actions like delete/logout */
+.danger-btn {
+  background-color: #dc2626;
+  border: 1px solid #dc2626;
+}
+
+/* Darker red hover state for danger buttons */
+.danger-btn:hover {
+  background-color: #b91c1c;
+  border-color: #b91c1c;
+}
+
+/* Smaller button variant for row-level actions */
+.small {
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+
+/* =========================================================
+   Main Content Sections
+   ========================================================= */
+
+/* Login view alignment */
+.login-section {
+  text-align: center;
+}
+
+/* Logged-in user summary area */
 .user-info {
   margin-bottom: 30px;
 }
 
+/* Stacks email + role neatly under the welcome message */
 .user-meta {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin: 10px 0;
-  color: rgba(255,255,255,0.7);
+
+  /* Slightly muted white to separate it from headings */
+  color: rgba(255, 255, 255, 0.7);
 }
 
+/* Horizontal grouping for Refresh / Logout buttons */
+.user-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+/* Generic panel section for admin areas like Add User / User Directory */
 .admin-panel {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.2);
+
+  /* Divider line between panels */
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.invite-form {
+/* Small helper text under admin headings */
+.hint {
+  margin-top: -6px;
+  margin-bottom: 12px;
+  opacity: 0.9;
+  font-size: 0.9rem;
+  line-height: 1.25rem;
+}
+
+
+/* =========================================================
+   Forms
+   ========================================================= */
+
+/* Form row for adding users */
+.user-form {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
 }
 
-.invite-form input,
-.invite-form select{
+/* Shared styling for the add user input and role dropdown */
+.user-form input,
+.user-form select {
   padding: 10px;
   border-radius: 10px;
   border: none;
-  background: rgba(255,255,255,0.1);
-  color: #fff !important;            /* closed state text */
+
+  /* Light transparent input background */
+  background: rgba(255, 255, 255, 0.1);
+
+  /* Force visible white text inside controls */
+  color: #fff !important;
 }
 
-/* dropdown list */
-.invite-form select option{
-  background: #fff;
-  color: #000;
-}
-
-/* selected option (this is what Chrome uses for the closed select text) */
-.invite-form select option:checked{
-  color: #fff;
-  background: #4f6ef7;               /* any dark/brand color */
-}
-
-
-.invite-form input {
+/* Make email input stretch more than the dropdown */
+.user-form input {
   flex: 1;
   min-width: 200px;
 }
 
+/* Dropdown option styling once the select opens */
+.user-form select option {
+  background: #fff;
+  color: #000;
+}
+
+/* Selected dropdown option styling */
+.user-form select option:checked {
+  color: #fff;
+  background: #4f6ef7;
+}
+
+
+/* =========================================================
+   User Directory Table
+   ========================================================= */
+
+/* Outer wrapper for the user directory table */
+.users-table {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Shared layout for the table header and each table row */
+.users-head,
+.users-row {
+  display: grid;
+
+  /* 3 columns: email, role, actions */
+  grid-template-columns: 1.6fr 0.8fr 1.6fr;
+
+  gap: 10px;
+  padding: 10px 12px;
+  align-items: center;
+}
+
+/* Table header row styling */
+.users-head {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+/* Each user row gets a separator line */
+.users-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Button area inside each user row */
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+
+/* =========================================================
+   Utility / Reusable Text Helpers
+   ========================================================= */
+
+/* Email text styling for better wrapping/readability */
+.mono {
+  font-size: 0.92rem;
+  word-break: break-word;
+}
+
+
+/* =========================================================
+   Status / Feedback
+   ========================================================= */
+
+/* General status text styling
+   Used for login/add/load/delete/update feedback */
 .status {
   margin-top: 10px;
   font-size: 14px;
-  color: #06b6d4;
+  color: #89bee5;
 }
 
+/* Generic loading message styling */
 .loading {
   text-align: center;
   padding: 30px;
-}
-
-/* ----------------------------
-   Simple in-app navigation
----------------------------- */
-.topbar{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:18px;
-  padding-bottom:18px;
-  border-bottom:1px solid rgba(255,255,255,0.15);
-}
-
-.topbar-title{
-  font-size:14px;
-  letter-spacing:0.12em;
-  text-transform:uppercase;
-  opacity:0.7;
-}
-
-.topbar-sub{
-  margin-top:6px;
-  font-size:14px;
-  opacity:0.9;
-}
-
-.topbar-actions{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  justify-content:flex-end;
-}
-
-.secondary-btn.compact{
-  margin-top:0;
-  padding:8px 12px;
-  border-radius:10px;
-}
-
-/* ----------------------------
-   Home page cards
----------------------------- */
-.muted{
-  color: rgba(255,255,255,0.7);
-}
-
-.home-grid{
-  display:grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap:14px;
-  margin-top:18px;
-}
-
-.home-card{
-  border:1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.04);
-  border-radius:16px;
-  padding:16px;
-}
-
-.home-card h3{
-  margin:0 0 6px 0;
-  font-size:16px;
-}
-
-.home-card p{
-  margin:0 0 12px 0;
-  font-size:14px;
-}
-
-@media (max-width: 720px){
-  .home-grid{ grid-template-columns: 1fr; }
-}
-
-/* optional: make "danger" buttons stand out slightly */
-.danger-btn{
-  border-color: rgba(255,120,120,0.6);
-}
-.pill{
-  display:inline-flex;
-  align-items:center;
-  padding:6px 10px;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  font-size:12px;
-  opacity:0.9;
-}
-
-/* ----------------------------
-   Login Error Alert
----------------------------- */
-
-.error-alert {
-  margin-bottom: 15px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: rgba(255, 80, 80, 0.12);
-  border: 1px solid rgba(255, 80, 80, 0.4);
-  color: #ff6b6b;
-  font-size: 14px;
-  font-weight: 500;
 }

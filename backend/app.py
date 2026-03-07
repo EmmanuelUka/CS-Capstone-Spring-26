@@ -1,8 +1,13 @@
+import hashlib
+import hmac
+import logging
 import os
-import uuid
 import secrets
+import uuid
 from datetime import timedelta
 from functools import wraps
+from logging.handlers import RotatingFileHandler
+from urllib.parse import urlencode
 
 import msal
 import requests
@@ -10,106 +15,202 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, request, session
 from flask_cors import CORS
 from flask_limiter import Limiter
+from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from db import (
-    init_db,
-    # users
+    attach_subject_to_user,
+    delete_user,
     get_user_by_email,
     get_user_by_subject,
-    create_user_if_missing,
-    attach_subject_to_user,
-    # orgs / memberships
-    create_org,
-    get_org,
-    list_orgs_for_user,
-    get_membership,
-    upsert_membership,
-    count_active_members,
-    list_members,
-    deactivate_membership,
-    delete_membership,
-    # invites
-    create_invite,
-    accept_valid_invites_for_user,
-    has_valid_invite,
-    # system
-    list_users_system,
-    list_orgs_system,
-    delete_org,
-    set_team_admin,
+    get_user_list,
+    init_db,
+    sync_super_admins,
+    update_user_role,
+    upsert_user,
 )
 
+
+# =========================================================
+# Environment / Startup
+# =========================================================
+
+# Loads variables from the .env file into the environment so the app can read
+# config like secrets, URLs, etc.
 load_dotenv()
 
-# ----------------------------
-# App setup
-# ----------------------------
-app = Flask(__name__)
 
-secret = os.getenv("FLASK_SECRET_KEY")
-if not secret:
-    raise RuntimeError("FLASK_SECRET_KEY must be set")
-app.secret_key = secret
-
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-API_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", FRONTEND_URL).split(",") if o.strip()]
-
-cookie_secure = os.getenv("COOKIE_SECURE", "0").strip() == "1"
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE=os.getenv("SESSION_SAMESITE", "Lax"),
-    SESSION_COOKIE_SECURE=cookie_secure,
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=int(os.getenv("SESSION_HOURS", "8"))),
-)
-
-CORS(app, supports_credentials=True, origins=API_ORIGINS)
-
-talisman_csp = {
-    "default-src": ["'self'"],
-    "img-src": ["'self'", "data:"],
-    "style-src": ["'self'", "'unsafe-inline'"],
-    "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-    "connect-src": ["'self'"] + API_ORIGINS,
-}
-Talisman(app, content_security_policy=talisman_csp, force_https=False)
-
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=[os.getenv("RATE_LIMIT_DEFAULT", "300 per hour")],
-)
-
-# ----------------------------
-# Microsoft OAuth config
-# ----------------------------
-CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID")
-CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET")
-TENANT = os.getenv("MICROSOFT_TENANT", "common")
-REDIRECT_URI = os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:5000/auth/microsoft/callback")
-
-ALLOWED_EMAIL_DOMAINS = [d.strip().lower() for d in os.getenv("ALLOWED_EMAIL_DOMAINS", "").split(",") if d.strip()]
-
-AUTHORITY = f"https://login.microsoftonline.com/{TENANT}"
-SCOPES = ["User.Read"]
-
-DEFAULT_ORG_SEAT_LIMIT = int(os.getenv("DEFAULT_ORG_SEAT_LIMIT", "25"))
-
-init_db(os.getenv("SEED_SUPER_ADMIN_EMAIL"), default_org_seat_limit=DEFAULT_ORG_SEAT_LIMIT)
+def _env_bool(name: str, default: bool = False) -> bool:
+    # Small helper to convert env values like "true", "1", "yes", etc. into
+    # actual booleans.
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _build_msal_app():
-    if not CLIENT_ID or not CLIENT_SECRET:
-        raise RuntimeError("Missing MICROSOFT_CLIENT_ID or MICROSOFT_CLIENT_SECRET in .env")
-    return msal.ConfidentialClientApplication(
-        CLIENT_ID,
-        authority=AUTHORITY,
-        client_credential=CLIENT_SECRET,
+def _env_list(name: str) -> list[str]:
+    # Reads a comma-separated env var and turns it into a list.
+    # Example: "a@test.com,b@test.com" -> ["a@test.com", "b@test.com"]
+    raw = os.getenv(name, "") or ""
+    return [x.strip().lower() for x in raw.split(",") if x.strip()]
+
+
+# =========================================================
+# Logging
+# =========================================================
+
+def _setup_logging():
+    # Reads logging config from env and sets up console/file logging.
+    # This is meant to make logging easy to control without changing code.
+    level_name = (os.getenv("LOG_LEVEL") or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    # Prevent logging from being configured multiple times if the module gets
+    # imported more than once.
+    if getattr(root, "_hashmark_logging_configured", False):
+        return
+    root._hashmark_logging_configured = True
+
+    fmt = os.getenv("LOG_FORMAT") or "%(asctime)s | %(levelname)s | %(message)s"
+    formatter = logging.Formatter(fmt)
+
+    # Console logging for local dev / terminal visibility.
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    console_handler.setFormatter(formatter)
+    root.addHandler(console_handler)
+
+    # Optional rotating file logging if LOG_FILE is set.
+    log_file = (os.getenv("LOG_FILE") or "").strip()
+    if log_file:
+        parent = os.path.dirname(log_file)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
+        max_bytes = int(os.getenv("LOG_FILE_MAX_BYTES") or str(10 * 1024 * 1024))
+        backups = int(os.getenv("LOG_FILE_BACKUP_COUNT") or "5")
+
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=backups,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+
+
+def _sanitize_log_value(value) -> str:
+    # Converts values to strings and truncates very long values.
+    if value is None:
+        return ""
+
+    s = str(value)
+    if len(s) > 500:
+        s = s[:500] + "...(truncated)"
+    return s
+
+
+def _log_secret() -> bytes:
+    # Separate secret used only for pseudonymous log identifiers.
+    value = (os.getenv("LOG_PSEUDO_KEY") or "").strip()
+    if not value:
+        raise RuntimeError("LOG_PSEUDO_KEY must be set")
+    return value.encode("utf-8")
+
+
+def _log_pseudo(value: str | None) -> str:
+    # Deterministic pseudonymous ID for logs. Same input -> same output.
+    if not value:
+        return ""
+    normalized = value.strip().lower().encode("utf-8")
+    digest = hmac.new(_log_secret(), normalized, hashlib.sha256).hexdigest()
+    return digest[:16]
+
+
+def _mask_email(email: str | None) -> str:
+    # Human-readable masked email for optional log readability.
+    if not email:
+        return ""
+
+    email = email.strip().lower()
+    if "@" not in email:
+        return "***"
+
+    local, domain = email.split("@", 1)
+    if len(local) <= 1:
+        masked_local = "*"
+    elif len(local) == 2:
+        masked_local = local[0] + "*"
+    else:
+        masked_local = local[0] + ("*" * (len(local) - 2)) + local[-1]
+
+    return f"{masked_local}@{domain}"
+
+
+def _log_identity_fields(prefix: str, email: str | None = None) -> dict[str, str]:
+    # Returns safe log fields for an email-based identity.
+    fields = {}
+    if email:
+        fields[f"{prefix}_id"] = _log_pseudo(email)
+
+        if _env_bool("LOG_INCLUDE_MASKED_EMAILS", default=True):
+            fields[f"{prefix}_masked"] = _mask_email(email)
+
+    return fields
+
+
+def _log_subject_fields(subject: str | None) -> dict[str, str]:
+    # Returns safe log fields for provider subject values.
+    if not subject:
+        return {}
+    return {"subject_id": _log_pseudo(subject)}
+
+
+def _log_event(event: str, level: str = "INFO", **fields):
+    # General structured logging helper.
+    # Everything gets logged as key=value pairs so logs are easier to scan.
+    parts = [f"event={_sanitize_log_value(event)}"]
+    for key, value in fields.items():
+        if value is None:
+            continue
+        parts.append(f"{key}={_sanitize_log_value(value)}")
+
+    msg = " ".join(parts)
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    logging.log(lvl, msg)
+
+
+# =========================================================
+# Request / Security Helpers
+# =========================================================
+
+def _get_request_id():
+    # Try to reuse an incoming request/correlation ID if one exists.
+    # If not, make a new one for tracing this request through logs.
+    rid = request.headers.get("X-Request-Id") or request.headers.get(
+        "X-Correlation-Id"
     )
+    return rid or str(uuid.uuid4())
+
+
+def _redirect_frontend_error(code: str):
+    # Redirect the user back to the frontend with an auth error code so the UI
+    # can display the correct message.
+    query = urlencode({"auth_error": code})
+    return redirect(f"{FRONTEND_URL}/?{query}")
 
 
 def _email_domain_allowed(email: str) -> bool:
+    # If allowed domains are configured, the email must belong to one of them.
+    # If no domains are configured, all domains are allowed.
     email = (email or "").lower()
     if "@" not in email:
         return False
@@ -117,10 +218,15 @@ def _email_domain_allowed(email: str) -> bool:
     return (not ALLOWED_EMAIL_DOMAINS) or (domain in ALLOWED_EMAIL_DOMAINS)
 
 
-# ----------------------------
-# CSRF (double-submit style)
-# ----------------------------
+def _is_super_admin_email(email: str) -> bool:
+    # Checks whether this email is one of the super admins defined in the
+    # environment config.
+    return (email or "").strip().lower() in SUPER_ADMIN_EMAILS
+
+
 def _ensure_csrf_token() -> str:
+    # Makes sure the current session has a CSRF token.
+    # If not, create one and store it in the session.
     token = session.get("csrf_token")
     if not token:
         token = secrets.token_urlsafe(32)
@@ -129,314 +235,731 @@ def _ensure_csrf_token() -> str:
 
 
 def _require_csrf():
+    # Enforce CSRF validation on state-changing requests.
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         sent = request.headers.get("X-CSRF-Token", "")
         expected = session.get("csrf_token", "")
+
         if not expected or not sent or sent != expected:
+            rid = request.environ.get("request_id")
+            ip = request.remote_addr
+            _log_event(
+                "csrf_failed",
+                level="WARNING",
+                ip=ip,
+                endpoint=request.path,
+                method=request.method,
+                request_id=rid,
+            )
             return jsonify({"error": "csrf_failed"}), 403
+
     return None
 
 
+def require_role(*roles):
+    # Decorator for routes that require the user to be logged in and have one of
+    # the allowed roles.
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user = session.get("user")
+            if not user:
+                rid = request.environ.get("request_id")
+                ip = request.remote_addr
+                _log_event(
+                    "not_authenticated",
+                    level="WARNING",
+                    ip=ip,
+                    endpoint=request.path,
+                    method=request.method,
+                    request_id=rid,
+                )
+                return jsonify({"error": "not_authenticated"}), 401
+
+            if user.get("role") not in roles:
+                rid = request.environ.get("request_id")
+                ip = request.remote_addr
+                _log_event(
+                    "forbidden",
+                    level="WARNING",
+                    ip=ip,
+                    endpoint=request.path,
+                    method=request.method,
+                    request_id=rid,
+                    required=",".join(roles),
+                    role=user.get("role"),
+                )
+                return jsonify({"error": "forbidden", "required": roles}), 403
+
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return deco
+
+
+# =========================================================
+# Flask App / Core Configuration
+# =========================================================
+
+app = Flask(__name__)
+_setup_logging()
+logging.getLogger("werkzeug").disabled = False  # Change to True to clean up logs
+
+# App environment controls things like production defaults.
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
+IS_PROD = APP_ENV == "production"
+
+# Flask session secret key. (must exist or the app should not start)
+secret = os.getenv("FLASK_SECRET_KEY")
+if not secret:
+    raise RuntimeError("FLASK_SECRET_KEY must be set")
+app.secret_key = secret
+
+# Frontend URL is used for redirects after login/callback.
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+
+# Allowed CORS origins for frontend requests.
+API_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", FRONTEND_URL).split(",")
+    if origin.strip()
+]
+
+# In production, require real CORS origins and do not allow wildcard because
+# credentials/cookies are being used.
+if IS_PROD:
+    if not API_ORIGINS:
+        raise RuntimeError("CORS_ORIGINS must be set in production")
+    if any(origin == "*" for origin in API_ORIGINS):
+        raise RuntimeError(
+            "CORS_ORIGINS cannot include '*' when supports_credentials=True"
+        )
+
+# If running behind a reverse proxy, ProxyFix helps Flask trust forwarded
+# headers like real IP / protocol.
+if _env_bool("USE_PROXY_FIX", default=IS_PROD):
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=int(os.getenv("PROXY_FIX_X_FOR", "1")),
+        x_proto=int(os.getenv("PROXY_FIX_X_PROTO", "1")),
+        x_host=int(os.getenv("PROXY_FIX_X_HOST", "1")),
+        x_port=int(os.getenv("PROXY_FIX_X_PORT", "0")),
+    )
+
+cookie_secure = _env_bool("COOKIE_SECURE", default=IS_PROD)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,  # Prevent JS from reading the session cookie.
+    SESSION_COOKIE_SAMESITE=os.getenv(
+        "SESSION_SAMESITE", "Lax"
+    ),  # Controls cross-site cookie behavior.
+    SESSION_COOKIE_SECURE=cookie_secure,  # Secure cookies only over HTTPS.
+    PERMANENT_SESSION_LIFETIME=timedelta(  # Session expiration window.
+        hours=int(os.getenv("SESSION_HOURS", "8"))
+    ),
+)
+
+# Enable CORS for the allowed frontend origins.
+CORS(app, supports_credentials=True, origins=API_ORIGINS)
+
+# Use stricter CSP in production and a more relaxed one in development.
+if IS_PROD:
+    talisman_csp = {
+        "default-src": ["'self'"],
+        "img-src": ["'self'", "data:"],
+        "style-src": [
+            "'self'",
+            "'unsafe-inline'",
+            "https://fonts.googleapis.com",
+        ],
+        "font-src": [
+            "'self'",
+            "https://fonts.gstatic.com",
+        ],
+        "script-src": ["'self'"],
+        "connect-src": ["'self'"] + API_ORIGINS,
+        "base-uri": ["'self'"],
+        "frame-ancestors": ["'none'"],
+        "object-src": ["'none'"],
+    }
+else:
+    talisman_csp = {
+        "default-src": ["'self'"],
+        "img-src": ["'self'", "data:"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "connect-src": ["'self'"] + API_ORIGINS,
+    }
+
+# Whether to force HTTPS redirects.
+force_https = _env_bool("FORCE_HTTPS", default=False)
+Talisman(app, content_security_policy=talisman_csp, force_https=force_https)
+
+# Global rate limiter. Uses client IP as the key.
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[os.getenv("RATE_LIMIT_DEFAULT", "300 per hour")],
+)
+
+
+# =========================================================
+# Microsoft Auth Configuration
+# =========================================================
+
+CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID")
+CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET")
+TENANT = os.getenv("MICROSOFT_TENANT", "common")
+REDIRECT_URI = os.getenv(
+    "MICROSOFT_REDIRECT_URI",
+    "http://localhost:5000/auth/microsoft/callback",
+)
+
+# Optional email domain allowlist.
+ALLOWED_EMAIL_DOMAINS = [
+    domain.strip().lower()
+    for domain in os.getenv("ALLOWED_EMAIL_DOMAINS", "").split(",")
+    if domain.strip()
+]
+
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT}"
+SCOPES = ["User.Read"]
+
+# Super admins managed from env.
+SUPER_ADMIN_EMAILS = set(_env_list("SUPER_ADMIN_EMAILS"))
+ENFORCE_SUPER_ADMIN_LIST = _env_bool("ENFORCE_SUPER_ADMIN_LIST", default=True)
+
+
+def _build_msal_app():
+    # Builds the MSAL confidential client used for Microsoft OAuth.
+    if not CLIENT_ID or not CLIENT_SECRET:
+        raise RuntimeError(
+            "Missing MICROSOFT_CLIENT_ID or MICROSOFT_CLIENT_SECRET in .env"
+        )
+
+    return msal.ConfidentialClientApplication(
+        CLIENT_ID,
+        authority=AUTHORITY,
+        client_credential=CLIENT_SECRET,
+    )
+
+
+# =========================================================
+# Database Startup
+# =========================================================
+
+init_db()  # Create tables if needed.
+
+# Sync env-defined super admins into the database.
+sync_super_admins(SUPER_ADMIN_EMAILS, enforce=ENFORCE_SUPER_ADMIN_LIST)
+
+
+# =========================================================
+# Flask Hooks / Error Handlers
+# =========================================================
+
 @app.before_request
-def _csrf_guard():
-    if request.path.startswith("/auth/microsoft/callback") or request.path == "/health":
+def _before_request():
+    # Assign a request ID to every incoming request so logs can be traced
+    # across the full lifecycle of the request.
+    request.environ["request_id"] = _get_request_id()
+
+    if request.path.startswith("/auth/microsoft/callback"):
         return None
+
+    if request.path == "/health":
+        return None
+
     if request.path.startswith("/auth/microsoft/login"):
         return None
+
     return _require_csrf()
 
 
-# ----------------------------
-# Auth helpers
-# ----------------------------
-def _session_user():
-    return session.get("user")
-
-
-def _clear_active_org():
-    if session.get("user"):
-        session["user"]["orgId"] = None
-        session["user"]["role"] = None
-
-def _validate_active_org_membership() -> bool:
-    """Ensure session.user.orgId/role points to a real active membership.
-    If invalid (stale cookie after DB reset, deleted org, etc.), clears orgId/role.
-    Returns True if valid, False otherwise.
-    """
-    u = session.get("user") or {}
-    if not u.get("orgId") or not u.get("role") or not u.get("userId"):
-        return False
+@app.after_request
+def _log_denials(resp):
+    # Logs 401 and 403 responses after the request finishes.
     try:
-        org_id = int(u.get("orgId"))
-        user_id = int(u.get("userId"))
+        rid = request.environ.get("request_id")
+        ip = request.remote_addr
+        endpoint = request.path
+
+        if resp.status_code in (401, 403):
+            _log_event(
+                "access_denied",
+                level="WARNING",
+                ip=ip,
+                endpoint=endpoint,
+                method=request.method,
+                status=resp.status_code,
+                request_id=rid,
+            )
     except Exception:
-        _clear_active_org()
-        return False
-    org = get_org(org_id)
-    if not org:
-        _clear_active_org()
-        return False
-    m = get_membership(user_id, org_id)
-    if not m or m["is_active"] != 1:
-        _clear_active_org()
-        return False
-    # keep role in sync with DB
-    session["user"]["orgId"] = org_id
-    session["user"]["role"] = m["role"]
-    return True
+        pass
+
+    return resp
 
 
-def require_login(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        u = _session_user()
-        if not u:
-            return jsonify({"error": "not_authenticated"}), 401
-        return fn(*args, **kwargs)
-    return wrapper
+@app.errorhandler(RateLimitExceeded)
+def _rate_limit_exceeded(e):
+    # Handles Flask-Limiter exceptions in a consistent way.
+    rid = request.environ.get("request_id")
+    ip = request.remote_addr
+    endpoint = request.path
+
+    _log_event(
+        "rate_limit_triggered",
+        level="WARNING",
+        ip=ip,
+        endpoint=endpoint,
+        method=request.method,
+        request_id=rid,
+        detail=getattr(e, "description", ""),
+    )
+    return jsonify({"error": "rate_limited"}), 429
 
 
-def require_system_role(*roles):
-    def deco(fn):
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            u = _session_user()
-            if not u:
-                return jsonify({"error": "not_authenticated"}), 401
-            if (u.get("systemRole") or "") not in roles:
-                return jsonify({"error": "forbidden", "required": roles}), 403
-            return fn(*args, **kwargs)
-        return wrapper
-    return deco
+# =========================================================
+# Basic Routes
+# =========================================================
 
-
-
-def require_org_role(*roles):
-    def deco(fn):
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            u = _session_user()
-            if not u:
-                return jsonify({"error": "not_authenticated"}), 401
-
-            # Stale sessions happen if DB reset / org deleted. Validate and clear if needed.
-            if not _validate_active_org_membership():
-                return jsonify({"error": "no_active_org"}), 409
-
-            if u.get("role") not in roles:
-                return jsonify({"error": "forbidden", "required": roles}), 403
-
-            return fn(*args, **kwargs)
-        return wrapper
-    return deco
-
-
-
-def _set_active_org_for_user(user_id: int, org_id: int):
-    m = get_membership(user_id=user_id, org_id=org_id)
-    if not m or m["is_active"] != 1:
-        return False
-    session["user"]["orgId"] = int(org_id)
-    session["user"]["role"] = m["role"]
-    return True
-
-
-# ----------------------------
-# Routes
-# ----------------------------
 @app.get("/health")
 def health():
+    # Simple health check route.
     return jsonify({"ok": True})
 
 
 @app.get("/api/csrf")
 def api_csrf():
+    # Frontend can call this to get the current CSRF token.
     return jsonify({"csrfToken": _ensure_csrf_token()})
 
+
+@app.post("/auth/logout")
+@limiter.limit(os.getenv("RATE_LIMIT_LOGOUT", "30 per minute"))
+def logout():
+    # Clears the session and logs the user out.
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.get("/api/me")
+def api_me():
+    # Returns the current logged-in user from session.
+    # Also ensures a CSRF token exists for authenticated sessions.
+    if session.get("user"):
+        _ensure_csrf_token()
+    return jsonify(session.get("user"))
+
+
+# =========================================================
+# Microsoft Authentication Routes
+# =========================================================
 
 @app.get("/auth/microsoft/login")
 @limiter.limit(os.getenv("RATE_LIMIT_LOGIN", "30 per minute"))
 def microsoft_login():
-    state = str(uuid.uuid4())
-    session["oauth_state"] = state
+    # Starts the Microsoft login flow.
+    rid = request.environ.get("request_id")
+    ip = request.remote_addr
+
+    _log_event(
+        "login_attempt",
+        level="INFO",
+        ip=ip,
+        endpoint=request.path,
+        method=request.method,
+        request_id=rid,
+    )
+
+    # Clear any previous session before starting a fresh login flow.
+    session.clear()
     session.permanent = True
 
-    auth_url = _build_msal_app().get_authorization_request_url(
+    msal_app = _build_msal_app()
+    state = str(uuid.uuid4())
+
+    # Start Microsoft auth flow using PKCE.
+    flow = msal_app.initiate_auth_code_flow(
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI,
         state=state,
         prompt="select_account",
     )
-    return redirect(auth_url)
+    session["flow"] = flow
+    return redirect(flow["auth_uri"])
 
 
-@app.get("/auth/microsoft/callback")
+@app.route("/auth/microsoft/callback", methods=["GET", "POST"])
 @limiter.limit(os.getenv("RATE_LIMIT_CALLBACK", "60 per minute"))
 def microsoft_callback():
-    expected_state = session.pop("oauth_state", None)
-    if request.args.get("state") != expected_state:
-        return "Invalid state", 400
+    # Handles the Microsoft OAuth callback, validates the login, and creates the user session if access is authorized.
+    rid = request.environ.get("request_id")
+    ip = request.remote_addr
 
-    code = request.args.get("code")
-    if not code:
-        return "Missing authorization code.", 400
+    callback_data = request.values
 
-    token = _build_msal_app().acquire_token_by_authorization_code(
-        code=code,
-        scopes=SCOPES,
-        redirect_uri=REDIRECT_URI,
+    _log_event(
+        "oauth_callback_received",
+        level="INFO",
+        ip=ip,
+        endpoint=request.path,
+        method=request.method,
+        request_id=rid,
+        has_code=bool(callback_data.get("code")),
+        has_state=bool(callback_data.get("state")),
+        has_error=bool(callback_data.get("error")),
     )
 
+    msal_app = _build_msal_app()
+
+    flow = session.get("flow") or {}
+    try:
+        token = msal_app.acquire_token_by_auth_code_flow(flow, callback_data)
+    except ValueError:
+        _log_event(
+            "oauth_callback_invalid_state",
+            level="WARNING",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+        )
+        return _redirect_frontend_error("invalid_state")
+
+    session.pop("flow", None)
+
+    # If token exchange failed, stop here.
     if "access_token" not in token:
-        return "Login failed while acquiring token.", 400
+        _log_event(
+            "token_validation_failed",
+            level="ERROR",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            msal_error=token.get("error"),
+            msal_error_description=token.get("error_description"),
+        )
+        return _redirect_frontend_error("token_failed")
 
     access_token = token["access_token"]
     claims = token.get("id_token_claims") or {}
     tid = claims.get("tid") or "unknown"
 
-    me = requests.get(
-        "https://graph.microsoft.com/v1.0/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=10,
-    )
+    # Call Microsoft Graph to get the user's profile.
+    try:
+        me = requests.get(
+            "https://graph.microsoft.com/v1.0/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=(5, 30),
+        )
+    except requests.exceptions.Timeout:
+        _log_event(
+            "graph_timeout",
+            level="ERROR",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+        )
+        return _redirect_frontend_error("graph_timeout")
+    except requests.exceptions.RequestException:
+        _log_event(
+            "graph_failed",
+            level="ERROR",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+        )
+        return _redirect_frontend_error("graph_failed")
+
     if me.status_code != 200:
-        return "Login failed while fetching profile.", 400
+        _log_event(
+            "graph_failed",
+            level="ERROR",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+        )
+        return _redirect_frontend_error("graph_failed")
 
     profile = me.json()
     oid = profile.get("id")
     email = (profile.get("mail") or profile.get("userPrincipalName") or "").lower()
     name = profile.get("displayName") or ""
 
-    if not _email_domain_allowed(email):
-        return "Access not granted (domain not allowed).", 403
+    # Must have an email to continue.
+    if not email:
+        _log_event(
+            "profile_missing_email",
+            level="WARNING",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+        )
+        return redirect(FRONTEND_URL + "/?auth=denied")
 
+    # Check if the email domain is allowed.
+    if not _email_domain_allowed(email):
+        _log_event(
+            "domain_not_allowed",
+            level="WARNING",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            **_log_identity_fields("user", email),
+        )
+        return _redirect_frontend_error("domain_not_allowed")
+
+    # Build a stable subject string from tenant ID + object ID.
     subject = f"{tid}:{oid}" if tid and oid else None
 
+    # Make sure authenticated sessions have CSRF token ready.
     _ensure_csrf_token()
 
-    # Identify / create user identity
-    u = None
+    # If this email is configured as super admin in env, force it into the DB
+    # and session as SUPER_ADMIN.
+    if _is_super_admin_email(email):
+        upsert_user(email=email, role="SUPER_ADMIN", provider_subject=subject)
+        session["user"] = {
+            "email": email,
+            "role": "SUPER_ADMIN",
+            "name": name,
+            "subject": subject,
+        }
+        _log_event(
+            "login_success",
+            level="INFO",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            role="SUPER_ADMIN",
+            method="super_admin_env",
+            **_log_identity_fields("user", email),
+            **_log_subject_fields(subject),
+        )
+        return redirect(FRONTEND_URL + "/")
+
+    # First try matching on provider subject if available.
     if subject:
-        u = get_user_by_subject(subject)
-    if not u and email:
-        u = get_user_by_email(email)
+        user = get_user_by_subject(subject)
+        if user:
+            session["user"] = {
+                "email": email,
+                "role": user["role"],
+                "name": name,
+                "subject": subject,
+            }
+            _log_event(
+                "login_success",
+                level="INFO",
+                ip=ip,
+                endpoint=request.path,
+                request_id=rid,
+                role=user["role"],
+                method="subject_match",
+                **_log_identity_fields("user", email),
+                **_log_subject_fields(subject),
+            )
+            return redirect(FRONTEND_URL + "/")
 
-    if not u:
-        # Invite-only: only create an identity if there's a valid invite waiting.
-        # SUPER_ADMIN users should already exist via seeding.
-        if has_valid_invite(email):
-            u = create_user_if_missing(email)
-        else:
-            return redirect(FRONTEND_URL + "/?error=invalid_access")
+    # If subject match did not work, fall back to email match.
+    user = get_user_by_email(email)
+    if user:
+        # If this user existed before subject was known, bind the new provider
+        # subject now.
+        if subject and not user["provider_subject"]:
+            attach_subject_to_user(email, subject)
+            _log_event(
+                "subject_bound",
+                level="INFO",
+                ip=ip,
+                endpoint=request.path,
+                request_id=rid,
+                **_log_identity_fields("user", email),
+                **_log_subject_fields(subject),
+            )
 
-    if subject and u and not u["provider_subject"]:
-        attach_subject_to_user(email, subject)
+        session["user"] = {
+            "email": email,
+            "role": user["role"],
+            "name": name,
+            "subject": subject,
+        }
+        _log_event(
+            "login_success",
+            level="INFO",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            role=user["role"],
+            method="email_match",
+            **_log_identity_fields("user", email),
+            **_log_subject_fields(subject),
+        )
+        return redirect(FRONTEND_URL + "/")
 
-    if not u or u["is_active"] != 1:
-        return redirect(FRONTEND_URL + "/?error=invalid_access")
-
-    user_id = int(u["id"])
-
-    # Accept any pending invites (could be multiple orgs)
-    accept_valid_invites_for_user(email, user_id)
-
-    # Determine org memberships
-    orgs = list_orgs_for_user(user_id)
-
-    # Gate: only allow sign-in for users who are on a team or have SUPER_ADMIN system role.
-    system_role = (u["system_role"] or "").upper()
-    if system_role != "SUPER_ADMIN" and len(orgs) == 0:
-        session.pop("user", None)
-        return "Access not granted. You must be invited to a team.", 403
-
-    active_org_id = None
-    active_role = None
-
-    # Prefer previously selected org if still valid
-    prior_org_id = session.get("user", {}).get("orgId")
-    if prior_org_id:
-        m = get_membership(user_id, int(prior_org_id))
-        if m and m["is_active"] == 1:
-            active_org_id = int(prior_org_id)
-            active_role = m["role"]
-
-    # Auto-select if exactly one org
-    if not active_org_id and len([o for o in orgs if o.get("is_active") == 1]) == 1:
-        active_org_id = int(orgs[0]["id"])
-        active_role = orgs[0]["role"]
-
-    session["user"] = {
-        "userId": user_id,
-        "email": u["email"],
-        "name": name,
-        "subject": subject,
-        "systemRole": u["system_role"],
-        "orgId": active_org_id,
-        "role": active_role,
-    }
-
-    return redirect(FRONTEND_URL + "/")
-
-
-@app.post("/auth/logout")
-@limiter.limit(os.getenv("RATE_LIMIT_LOGOUT", "30 per minute"))
-def logout():
-    session.clear()
-    return jsonify({"ok": True})
-
-
-
-@app.get("/api/me")
-def api_me():
-    if session.get("user"):
-        _ensure_csrf_token()
-        # Clear stale org context if org was deleted / DB reset
-        _validate_active_org_membership()
-    return jsonify(session.get("user"))
+    # If no matching approved user exists, deny access.
+    _log_event(
+        "access_not_granted",
+        level="WARNING",
+        ip=ip,
+        endpoint=request.path,
+        request_id=rid,
+        **_log_identity_fields("user", email),
+        **_log_subject_fields(subject),
+    )
+    return _redirect_frontend_error("access_not_granted")
 
 
+# =========================================================
+# User Management Routes
+# =========================================================
 
-@app.get("/api/orgs")
-@require_login
-def api_orgs():
-    u = session["user"]
-    orgs = list_orgs_for_user(int(u["userId"]))
-    return jsonify({"orgs": orgs, "activeOrgId": u.get("orgId")})
+@app.get("/api/users")
+@require_role("SUPER_ADMIN", "ADMIN")
+def api_users():
+    # Returns the user list for admin views.
+    return jsonify({"users": get_user_list()})
 
 
-@app.post("/api/set-org")
-@require_login
-def api_set_org():
+@app.post("/api/users")
+@require_role("SUPER_ADMIN", "ADMIN")
+@limiter.limit(os.getenv("RATE_LIMIT_ADD_USER", "20 per minute"))
+def api_add_user():
+    # Adds a new allowed user to the system.
+    rid = request.environ.get("request_id")
+    ip = request.remote_addr
+    actor = session.get("user", {}).get("email")
+
     if not request.is_json:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="add_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="expected_json",
+            **_log_identity_fields("actor", actor),
+        )
         return jsonify({"error": "expected_json"}), 400
+
     data = request.get_json(silent=True) or {}
-    org_id = data.get("orgId")
-    if not org_id:
-        return jsonify({"error": "missing_orgId"}), 400
-    ok = _set_active_org_for_user(int(session["user"]["userId"]), int(org_id))
-    if not ok:
-        return jsonify({"error": "not_a_member"}), 403
-    return jsonify({"ok": True, "orgId": session["user"]["orgId"], "role": session["user"]["role"]})
+    email = (data.get("email") or "").strip().lower()
+    role = (data.get("role") or "").strip().upper() or "COACH"
+
+    if not email or "@" not in email:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="add_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="invalid_email",
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "invalid_email"}), 400
+
+    if not _email_domain_allowed(email):
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="add_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="email_domain_not_allowed",
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "email_domain_not_allowed"}), 400
+
+    # Regular admins are only allowed to add coaches.
+    requester_role = session.get("user", {}).get("role")
+    if requester_role == "ADMIN" and role != "COACH":
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="add_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="forbidden_role",
+            role=role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "forbidden_role"}), 403
+
+    # This route only allows creating ADMIN or COACH.
+    if role not in {"ADMIN", "COACH"}:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="add_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="invalid_role",
+            role=role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "invalid_role"}), 400
+
+    existing = get_user_by_email(email)
+
+    if existing:
+        _log_event(
+            "user_create_attempt_existing",
+            level="INFO",
+            role=role,
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"ok": True, "status": "user_exists"})
+
+    upsert_user(email=email, role=role)
+
+    _log_event(
+        "user_created",
+        level="INFO",
+        action="add_user",
+        role=role,
+        ip=ip,
+        endpoint=request.path,
+        request_id=rid,
+        **_log_identity_fields("actor", actor),
+        **_log_identity_fields("target", email),
+    )
+
+    return jsonify({"ok": True, "status": "created"})
 
 
-# ----------------------------
-# Org-scoped admin features
-# ----------------------------
-@app.get("/api/members")
-@require_org_role("ADMIN")
-def api_members():
-    org_id = int(session["user"]["orgId"])
-    members = list_members(org_id)
-    org = get_org(org_id)
-    used = count_active_members(org_id)
-    return jsonify({"members": members, "seatLimit": org["seat_limit"], "seatsUsed": used})
+@app.patch("/api/users/role")
+@require_role("SUPER_ADMIN")
+@limiter.limit(os.getenv("RATE_LIMIT_SET_ROLE", "20 per minute"))
+def api_set_user_role():
+    # Lets only SUPER_ADMIN change user roles.
+    rid = request.environ.get("request_id")
+    ip = request.remote_addr
+    actor = session.get("user", {}).get("email")
 
-
-@app.post("/api/invite")
-@require_org_role("ADMIN")
-@limiter.limit(os.getenv("RATE_LIMIT_INVITE", "20 per minute"))
-def api_invite():
     if not request.is_json:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="set_user_role",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="expected_json",
+            **_log_identity_fields("actor", actor),
+        )
         return jsonify({"error": "expected_json"}), 400
 
     data = request.get_json(silent=True) or {}
@@ -444,175 +967,227 @@ def api_invite():
     role = (data.get("role") or "").strip().upper()
 
     if not email or "@" not in email:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="set_user_role",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="invalid_email",
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
         return jsonify({"error": "invalid_email"}), 400
-    if not _email_domain_allowed(email):
-        return jsonify({"error": "email_domain_not_allowed"}), 400
-    if role not in {"COACH", "SCOUT"}:
+
+    # SUPER_ADMIN cannot assign SUPER_ADMIN through this route.
+    # This only supports ADMIN and COACH role changes.
+    if role not in {"ADMIN", "COACH"}:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="set_user_role",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="invalid_role",
+            new_role=role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
         return jsonify({"error": "invalid_role"}), 400
 
-    org_id = int(session["user"]["orgId"])
-    org = get_org(org_id)
-    used = count_active_members(org_id)
+    # Prevent self-demotion / self-change.
+    if email == session["user"]["email"].lower():
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="set_user_role",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="cannot_modify_self",
+            new_role=role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "cannot_modify_self"}), 403
 
-    # Seat limit enforcement: only counts active memberships.
-    # You can decide whether inviting an existing user counts immediately; here we only block
-    # if they'd create/activate a membership beyond limit.
-    if used >= int(org["seat_limit"]):
-        return jsonify({"error": "seat_limit_reached", "seatLimit": org["seat_limit"], "seatsUsed": used}), 409
+    target = get_user_by_email(email)
+    if not target:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="set_user_role",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="user_not_found",
+            new_role=role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "user_not_found"}), 404
 
-    inviter_user_id = int(session["user"]["userId"])
-    result = create_invite(org_id=org_id, email=email, role=role, invited_by_user_id=inviter_user_id)
-    return jsonify({"ok": True, "result": result, "seatLimit": org["seat_limit"], "seatsUsed": used})
+    # Do not allow this route to modify another super admin.
+    if (target["role"] or "").upper() == "SUPER_ADMIN":
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="set_user_role",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="cannot_modify_super_admin",
+            new_role=role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "cannot_modify_super_admin"}), 403
 
+    update_user_role(email, role)
 
-@app.patch("/api/members/<int:target_user_id>/role")
-@require_org_role("ADMIN")
-def api_change_role(target_user_id: int):
-    """Team admins may only change roles of non-admin members, and only to COACH/SCOUT.
-    (Changing team admins is reserved for system SUPER_ADMINs.)
-    """
-    if not request.is_json:
-        return jsonify({"error": "expected_json"}), 400
+    _log_event(
+        "user_role_changed",
+        level="INFO",
+        action="set_user_role",
+        new_role=role,
+        ip=ip,
+        endpoint=request.path,
+        request_id=rid,
+        **_log_identity_fields("actor", actor),
+        **_log_identity_fields("target", email),
+    )
 
-    org_id = int(session["user"]["orgId"])
-    acting_user_id = int(session["user"]["userId"])
-
-    if int(target_user_id) == acting_user_id:
-        return jsonify({"error": "cannot_change_own_role"}), 409
-
-    target = get_membership(user_id=int(target_user_id), org_id=org_id)
-    if not target or target["is_active"] != 1:
-        return jsonify({"error": "member_not_found"}), 404
-
-    # Team admins cannot modify other admins (only system operators can change team admins)
-    if (target["role"] or "").upper() == "ADMIN":
-        return jsonify({"error": "cannot_modify_admin"}), 409
-
-    data = request.get_json(silent=True) or {}
-    new_role = (data.get("role") or "").strip().upper()
-    if new_role not in {"COACH", "SCOUT"}:
-        return jsonify({"error": "invalid_role"}), 400
-
-    upsert_membership(org_id=org_id, user_id=int(target_user_id), role=new_role, is_active=1)
     return jsonify({"ok": True})
 
 
+@app.delete("/api/users")
+@require_role("SUPER_ADMIN", "ADMIN")
+@limiter.limit(os.getenv("RATE_LIMIT_DELETE_USER", "20 per minute"))
+def api_delete_user():
+    # Deletes a user from the system entirely.
+    rid = request.environ.get("request_id")
+    ip = request.remote_addr
+    actor = session.get("user", {}).get("email")
 
-@app.delete("/api/members/<int:target_user_id>")
-@require_org_role("ADMIN")
-def api_remove_member(target_user_id: int):
-    """Team admins may remove (deactivate) non-admin members only.
-    Removing team admins is reserved for system SUPER_ADMINs.
-    """
-    org_id = int(session["user"]["orgId"])
-    acting_user_id = int(session["user"]["userId"])
-
-    if int(target_user_id) == acting_user_id:
-        return jsonify({"error": "cannot_remove_self"}), 409
-
-    target = get_membership(user_id=int(target_user_id), org_id=org_id)
-    if not target or target["is_active"] != 1:
-        return jsonify({"error": "member_not_found"}), 404
-
-    if (target["role"] or "").upper() == "ADMIN":
-        return jsonify({"error": "cannot_remove_admin"}), 409
-
-    delete_membership(org_id=org_id, user_id=int(target_user_id))
-    return jsonify({"ok": True})
-
-
-
-# ----------------------------
-# Hashmark operator endpoints
-# ----------------------------
-@app.get("/api/system/users")
-@require_system_role("SUPER_ADMIN")
-def api_system_users():
-    return jsonify({"users": list_users_system()})
-
-
-@app.post("/api/system/create-org-admin")
-@require_system_role("SUPER_ADMIN")
-def api_system_create_org_admin():
-    """Hashmark operator flow:
-    - create org
-    - ensure admin user exists by email
-    - grant membership ADMIN
-    """
     if not request.is_json:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="delete_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="expected_json",
+            **_log_identity_fields("actor", actor),
+        )
         return jsonify({"error": "expected_json"}), 400
-    data = request.get_json(silent=True) or {}
-    org_name = (data.get("orgName") or "").strip()
-    admin_email = (data.get("adminEmail") or "").strip().lower()
-    seat_limit = int(data.get("seatLimit") or DEFAULT_ORG_SEAT_LIMIT)
-
-    if not org_name:
-        return jsonify({"error": "missing_orgName"}), 400
-    if not admin_email or "@" not in admin_email:
-        return jsonify({"error": "invalid_email"}), 400
-
-    org = create_org(org_name, seat_limit=seat_limit)
-    admin_user = create_user_if_missing(admin_email)
-    upsert_membership(org_id=int(org["id"]), user_id=int(admin_user["id"]), role="ADMIN", is_active=1)
-
-    return jsonify({"ok": True, "orgId": int(org["id"]), "orgName": org["name"], "adminUserId": int(admin_user["id"])})
-
-
-
-
-# ----------------------------
-# System SUPER_ADMIN org management
-# ----------------------------
-@app.get("/api/system/orgs")
-@require_system_role("SUPER_ADMIN")
-def api_system_orgs():
-    return jsonify({"orgs": list_orgs_system()})
-
-
-@app.get("/api/system/orgs/<int:org_id>/members")
-@require_system_role("SUPER_ADMIN")
-def api_system_org_members(org_id: int):
-    org = get_org(org_id)
-    if not org:
-        return jsonify({"error": "org_not_found"}), 404
-    members = list_members(org_id)
-    used = count_active_members(org_id)
-    return jsonify({"org": dict(org), "members": members, "seatsUsed": used})
-
-
-@app.put("/api/system/orgs/<int:org_id>/admin")
-@require_system_role("SUPER_ADMIN")
-def api_system_set_team_admin(org_id: int):
-    """Change the TEAM ADMIN for an org. This is the only member-management
-    operation system SUPER_ADMINs should perform (besides deleting the org).
-    """
-    if not request.is_json:
-        return jsonify({"error": "expected_json"}), 400
-
-    org = get_org(org_id)
-    if not org:
-        return jsonify({"error": "org_not_found"}), 404
 
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
+
     if not email or "@" not in email:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="delete_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="invalid_email",
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
         return jsonify({"error": "invalid_email"}), 400
 
-    user = create_user_if_missing(email)
-    set_team_admin(org_id=org_id, new_admin_user_id=int(user["id"]))
-    return jsonify({"ok": True, "orgId": org_id, "adminEmail": email})
+    # Do not allow users to delete themselves.
+    if email == session["user"]["email"].lower():
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="delete_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="cannot_modify_self",
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "cannot_modify_self"}), 403
 
+    target = get_user_by_email(email)
+    if not target:
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="delete_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="user_not_found",
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "user_not_found"}), 404
 
-@app.delete("/api/system/orgs/<int:org_id>")
-@require_system_role("SUPER_ADMIN")
-def api_system_delete_org(org_id: int):
-    """Delete a team/org completely (cascades memberships + invites)."""
-    ok = delete_org(org_id)
-    if not ok:
-        return jsonify({"error": "org_not_found"}), 404
+    target_role = (target["role"] or "").upper()
+    requester_role = session["user"]["role"]
+
+    # Nobody should delete a SUPER_ADMIN through this route.
+    if target_role == "SUPER_ADMIN":
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="delete_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="cannot_modify_super_admin",
+            target_role=target_role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "cannot_modify_super_admin"}), 403
+
+    # Regular admins can only delete coaches.
+    if requester_role == "ADMIN" and target_role != "COACH":
+        _log_event(
+            "admin_action_failed",
+            level="WARNING",
+            action="delete_user",
+            ip=ip,
+            endpoint=request.path,
+            request_id=rid,
+            reason="forbidden_target_role",
+            target_role=target_role,
+            **_log_identity_fields("actor", actor),
+            **_log_identity_fields("target", email),
+        )
+        return jsonify({"error": "forbidden_target_role"}), 403
+
+    _log_event(
+        "user_deleted",
+        level="INFO",
+        action="delete_user",
+        target_role=target_role,
+        ip=ip,
+        endpoint=request.path,
+        request_id=rid,
+        **_log_identity_fields("actor", actor),
+        **_log_identity_fields("target", email),
+    )
+
+    delete_user(email)
     return jsonify({"ok": True})
 
 
+# =========================================================
+# Local Dev Entrypoint
+# =========================================================
+
 if __name__ == "__main__":
-    debug = os.getenv("FLASK_DEBUG", "0").strip() == "1"
+    # For local development only.
+    # In production this would normally be run by Gunicorn/uWSGI/etc.
+    debug = _env_bool("FLASK_DEBUG", default=False)
     app.run(port=5000, debug=debug)

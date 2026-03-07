@@ -1,148 +1,196 @@
 import os
 import sqlite3
-from datetime import datetime, timedelta, timezone
+import hmac
+import hashlib
+import base64
+from datetime import datetime, timezone
+from typing import Iterable, Optional
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+
+# =========================================================
+# Configuration / Constants
+# =========================================================
+
+# Path to the SQLite database file.
+# It gets placed in the same folder as this Python file.
 DB_PATH = os.path.join(os.path.dirname(__file__), "hashmark.db")
 
-
-def _connect():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+# These are the only roles the system should allow.
+# Keeping them here makes validation easier everywhere else.
+ALLOWED_ROLES = {"SUPER_ADMIN", "ADMIN", "COACH"}
 
 
-def _utc_now_iso() -> str:
+# =========================================================
+# Environment Helpers
+# =========================================================
+
+def _require_env(name: str) -> str:
+    # Used for env vars that absolutely must exist.
+    # If one is missing, the system should fail immediately instead of silently running with broken security.
+    value = os.getenv(name)
+    if not value or not value.strip():
+        raise RuntimeError(f"{name} must be set (see .env.example)")
+    return value.strip()
+
+
+# =========================================================
+# General Utility Helpers
+# =========================================================
+
+def _normalize_email(email: str) -> str:
+    # Makes email comparisons consistent.
+    # This avoids issues like uppercase/lowercase or extra spaces.
+    return (email or "").strip().lower()
+
+
+def _now_iso() -> str:
+    # Returns the current UTC time as an ISO string.
+    # Used for created_at / updated_at timestamps.
     return datetime.now(timezone.utc).isoformat()
 
 
-def init_db(seed_system_admin_email: str | None, default_org_seat_limit: int = 25):
-    """Initialize DB schema.
+# =========================================================
+# Cryptography Helpers
+# =========================================================
 
-    This version supports:
-      - Organizations (teams)
-      - Users (identity)
-      - Memberships (role per org)
-      - Invites scoped to org
-      - Optional system-level admin (seed_system_admin_email)
-    """
+def _pepper_bytes() -> bytes:
+    # Loads the email hash pepper from the environment.
+    # This adds a secret value to hashing so hashes are harder to attack even if someone got the database.
+    return _require_env("EMAIL_HASH_PEPPER").encode("utf-8")
+
+
+def _aes_key() -> bytes:
+    # Loads the base64-encoded AES key from the environment and converts it into raw bytes for AESGCM use.
+    raw_b64 = _require_env("EMAIL_ENC_KEY_B64")
+    try:
+        key = base64.b64decode(raw_b64)
+    except Exception as e:
+        raise RuntimeError("EMAIL_ENC_KEY_B64 must be valid base64") from e
+
+    if len(key) != 32:
+        raise RuntimeError("EMAIL_ENC_KEY_B64 must decode to exactly 32 bytes")
+
+    return key
+
+
+def email_hash(email: str) -> bytes:
+    # Creates a deterministic secure hash of the email.
+    # Deterministic matters because I need the same input email to always hash to the same value for lookups.
+    # HMAC is used instead of plain SHA-256 so a secret pepper is involved, which is better for protecting stored emails.
+    normalized = _normalize_email(email).encode("utf-8")
+    return hmac.new(_pepper_bytes(), normalized, hashlib.sha256).digest()
+
+
+def encrypt_email(email: str) -> bytes:
+    # Encrypts the email before storing it.
+    # Hashing is used for lookups, but encryption is used so the real email can still be recovered when needed.
+    normalized = _normalize_email(email).encode("utf-8")
+    aesgcm = AESGCM(_aes_key())
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, normalized, associated_data=None)
+    return nonce + ciphertext
+
+
+def decrypt_email(blob: bytes) -> str:
+    # Decrypts the stored email blob back into a normal string.
+    # If the value is missing, invalid, or cannot be decrypted, return "".
+    if blob is None:
+        return ""
+
+    try:
+        data = bytes(blob)
+        if len(data) < 13:
+            return ""
+
+        # First 12 bytes are the nonce, rest is ciphertext+tag.
+        nonce, ciphertext = data[:12], data[12:]
+        aesgcm = AESGCM(_aes_key())
+        plaintext = aesgcm.decrypt(nonce, ciphertext, associated_data=None)
+        return plaintext.decode("utf-8")
+    except Exception:
+        return ""
+
+
+# =========================================================
+# Database Helpers
+# =========================================================
+
+def _connect() -> sqlite3.Connection:
+    # Opens a connection to the SQLite database and sets row_factory
+    # so rows can be accessed like dictionaries instead of only tuples.
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    # SQLite "production-ish" pragmas
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA temp_store = MEMORY;")
+
+    return conn
+
+
+# =========================================================
+# Schema / Initialization
+# =========================================================
+
+def init_db():
+    # Creates the users table if it does not exist yet.
+    # This is the main table used by the auth/admin system.
     conn = _connect()
     cur = conn.cursor()
 
-    # --- New schema ---
-    cur.execute(
-        """
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            provider TEXT NOT NULL DEFAULT 'microsoft',
+            email_hash BLOB NOT NULL UNIQUE,
+            email_enc BLOB NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN','ADMIN','COACH')),
             provider_subject TEXT,
-            system_role TEXT, -- e.g. 'SUPER_ADMIN' for Hashmark operators
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS organizations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            seat_limit INTEGER NOT NULL DEFAULT 25,
-            allowed_domains TEXT, -- optional comma-separated domains (lowercase)
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS memberships (
-            org_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            role TEXT NOT NULL,         -- 'ADMIN' | 'COACH' | 'SCOUT'
-            is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
-            PRIMARY KEY (org_id, user_id),
-            FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            updated_at TEXT
         )
-        """
-    )
+    """)
 
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS invites (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            org_id INTEGER NOT NULL,
-            email TEXT NOT NULL,
-            role TEXT NOT NULL,
-            invited_by_user_id INTEGER NOT NULL,
-            expires_at TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            accepted_at TEXT,
-            FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
-            FOREIGN KEY (invited_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
-            UNIQUE (org_id, email)
-        )
-        """
-    )
+    # Index on provider_subject so subject lookups are faster.
+    # This matters when matching a Microsoft login back to a stored user.
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_subject
+        ON users(provider_subject)
+    """)
 
-    # Helpful indexes
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_users_subject ON users(provider_subject)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_invites_expires ON invites(expires_at)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_invites_email ON invites(email)")
-
-    # --- Migration from old schema (best-effort) ---
-    # If an older 'users' table existed with a 'role' column, migrate its roles.
-    try:
-        cur.execute("PRAGMA table_info(users)")
-        cols = [r[1] for r in cur.fetchall()]  # type: ignore[index]
-        # If we already have the new schema, 'role' won't exist.
-        if "role" in cols:
-            # Old schema is present; create new tables with suffix and migrate.
-            # We can't rename in-place safely here; user can delete db for dev.
-            pass
-    except Exception:
-        pass
+    # Makes provider_subject unique, but only when it exists.
+    # Multiple NULL values are allowed, which is what I want for users who exist before first successful Microsoft login.
+    cur.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_users_provider_subject
+        ON users(provider_subject)
+        WHERE provider_subject IS NOT NULL
+    """)
 
     conn.commit()
-
-    # Seed system admin (Hashmark operator)
-    if seed_system_admin_email:
-        email = seed_system_admin_email.strip().lower()
-        cur.execute("SELECT id FROM users WHERE email = ?", (email,))
-        row = cur.fetchone()
-        if row is None:
-            cur.execute(
-                """
-                INSERT INTO users (email, is_active, provider, system_role, created_at)
-                VALUES (?, 1, 'microsoft', 'SUPER_ADMIN', ?)
-                """,
-                (email, _utc_now_iso()),
-            )
-        else:
-            cur.execute("UPDATE users SET system_role='SUPER_ADMIN', is_active=1 WHERE email=?", (email,))
-        conn.commit()
-
     conn.close()
 
 
-# ----------------------------
-# Users
-# ----------------------------
+# =========================================================
+# User Read Operations
+# =========================================================
+
 def get_user_by_email(email: str):
+    # Finds a user by email using the deterministic email hash.
     conn = _connect()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE email = ?", (email.lower(),))
+    cur.execute("SELECT * FROM users WHERE email_hash = ?", (email_hash(email),))
     row = cur.fetchone()
     conn.close()
     return row
 
 
 def get_user_by_subject(subject: str):
+    # Finds a user by the OAuth provider subject.
+    # This is useful after Microsoft login when you get the subject from the identity provider instead of using email lookup.
     conn = _connect()
     cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE provider_subject = ?", (subject,))
@@ -151,364 +199,223 @@ def get_user_by_subject(subject: str):
     return row
 
 
-def create_user_if_missing(email: str, provider: str = "microsoft"):
-    email = email.lower().strip()
+def get_user_list():
+    # Returns a simplified list of users for admin/frontend use.
+    # The stored encrypted email is decrypted here so the UI can show it.
     conn = _connect()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE email = ?", (email,))
-    u = cur.fetchone()
-    if u:
-        conn.close()
-        return u
-    cur.execute(
-        """
-        INSERT INTO users (email, is_active, provider, created_at)
-        VALUES (?, 1, ?, ?)
-        """,
-        (email, provider, _utc_now_iso()),
-    )
-    conn.commit()
-    cur.execute("SELECT * FROM users WHERE email = ?", (email,))
-    u2 = cur.fetchone()
-    conn.close()
-    return u2
-
-
-def attach_subject_to_user(email: str, subject: str):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET provider_subject = ? WHERE email = ?", (subject, email.lower()))
-    conn.commit()
-    conn.close()
-
-
-# ----------------------------
-# Organizations
-# ----------------------------
-def create_org(name: str, seat_limit: int = 25, allowed_domains: str | None = None):
-    name = (name or "").strip()
-    if not name:
-        raise ValueError("org name required")
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM organizations WHERE name = ?", (name,))
-    existing = cur.fetchone()
-    if existing:
-        conn.close()
-        return existing
-
-    cur.execute(
-        """
-        INSERT INTO organizations (name, seat_limit, allowed_domains, created_at)
-        VALUES (?, ?, ?, ?)
-        """,
-        (name, int(seat_limit), (allowed_domains or None), _utc_now_iso()),
-    )
-    conn.commit()
-    cur.execute("SELECT * FROM organizations WHERE name = ?", (name,))
-    org = cur.fetchone()
-    conn.close()
-    return org
-
-
-def get_org(org_id: int):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM organizations WHERE id = ?", (int(org_id),))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-
-def list_orgs_for_user(user_id: int):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT o.id, o.name, o.seat_limit, o.allowed_domains,
-               m.role, m.is_active
-        FROM memberships m
-        JOIN organizations o ON o.id = m.org_id
-        WHERE m.user_id = ? AND m.is_active = 1
-        ORDER BY o.name ASC
-        """,
-        (int(user_id),),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def get_membership(user_id: int, org_id: int):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT * FROM memberships WHERE user_id=? AND org_id=?",
-        (int(user_id), int(org_id)),
-    )
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-
-def upsert_membership(org_id: int, user_id: int, role: str, is_active: int = 1):
-    role = role.strip().upper()
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT * FROM memberships WHERE org_id=? AND user_id=?",
-        (int(org_id), int(user_id)),
-    )
-    existing = cur.fetchone()
-    if existing:
-        cur.execute(
-            "UPDATE memberships SET role=?, is_active=? WHERE org_id=? AND user_id=?",
-            (role, int(is_active), int(org_id), int(user_id)),
-        )
-    else:
-        cur.execute(
-            """
-            INSERT INTO memberships (org_id, user_id, role, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (int(org_id), int(user_id), role, int(is_active), _utc_now_iso()),
-        )
-    conn.commit()
-    conn.close()
-
-
-def count_active_members(org_id: int):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT COUNT(*) AS c FROM memberships WHERE org_id=? AND is_active=1",
-        (int(org_id),),
-    )
-    c = int(cur.fetchone()["c"])
-    conn.close()
-    return c
-
-
-def list_members(org_id: int):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT u.id as user_id, u.email, u.provider_subject, u.is_active as user_active,
-               m.role, m.is_active as membership_active, m.created_at
-        FROM memberships m
-        JOIN users u ON u.id = m.user_id
-        WHERE m.org_id = ? AND m.is_active = 1
-        ORDER BY m.role ASC, u.email ASC
-        """,
-        (int(org_id),),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def deactivate_membership(org_id: int, user_id: int):
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE memberships SET is_active=0 WHERE org_id=? AND user_id=?",
-        (int(org_id), int(user_id)),
-    )
-    conn.commit()
-    conn.close()
-
-
-# ----------------------------
-# Invites (scoped to org)
-# ----------------------------
-def delete_membership(org_id: int, user_id: int):
-    """Hard-remove a membership so the user no longer sees the team at all."""
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        "DELETE FROM memberships WHERE org_id=? AND user_id=?",
-        (int(org_id), int(user_id)),
-    )
-    conn.commit()
-    conn.close()
-
-def create_invite(org_id: int, email: str, role: str, invited_by_user_id: int, ttl_hours: int = 168):
-    email = email.lower().strip()
-    role = role.strip().upper()
-
-    now = datetime.now(timezone.utc)
-    expires = (now + timedelta(hours=ttl_hours)).isoformat()
-
-    conn = _connect()
-    cur = conn.cursor()
-
-    # Upsert invite
-    cur.execute("SELECT * FROM invites WHERE org_id=? AND email=?", (int(org_id), email))
-    inv = cur.fetchone()
-    if inv:
-        cur.execute(
-            """
-            UPDATE invites
-            SET role=?, invited_by_user_id=?, expires_at=?, created_at=?, accepted_at=NULL
-            WHERE org_id=? AND email=?
-            """,
-            (role, int(invited_by_user_id), expires, now.isoformat(), int(org_id), email),
-        )
-        conn.commit()
-        conn.close()
-        return "invite_updated"
-
-    cur.execute(
-        """
-        INSERT INTO invites (org_id, email, role, invited_by_user_id, expires_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (int(org_id), email, role, int(invited_by_user_id), expires, now.isoformat()),
-    )
-    conn.commit()
-    conn.close()
-    return "invite_created"
-
-
-
-def has_valid_invite(email: str) -> bool:
-    """Return True if there is at least one non-expired, unaccepted invite for this email."""
-    email = (email or "").lower().strip()
-    if not email:
-        return False
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT expires_at FROM invites WHERE email=? AND accepted_at IS NULL",
-        (email,),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    if not rows:
-        return False
-    now = datetime.now(timezone.utc)
-    for r in rows:
-        try:
-            exp = datetime.fromisoformat(r["expires_at"])
-            if exp > now:
-                return True
-        except Exception:
-            continue
-    return False
-
-def accept_valid_invites_for_user(email: str, user_id: int):
-    """Accepts ALL non-expired invites for this email into memberships.
-    Returns number of invites accepted.
-    """
-    email = email.lower().strip()
-    conn = _connect()
-    cur = conn.cursor()
-
-    cur.execute("SELECT * FROM invites WHERE email=? AND accepted_at IS NULL", (email,))
-    invites = cur.fetchall()
-    if not invites:
-        conn.close()
-        return 0
-
-    now = datetime.now(timezone.utc)
-    accepted = 0
-
-    for inv in invites:
-        expires_at = datetime.fromisoformat(inv["expires_at"])
-        if expires_at < now:
-            continue
-
-        org_id = int(inv["org_id"])
-        role = inv["role"]
-
-        # Create/activate membership
-        cur.execute(
-            """
-            INSERT INTO memberships (org_id, user_id, role, is_active, created_at)
-            VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT(org_id, user_id) DO UPDATE SET role=excluded.role, is_active=1
-            """,
-            (org_id, int(user_id), role, now.isoformat()),
-        )
-        cur.execute(
-            "UPDATE invites SET accepted_at=? WHERE id=?",
-            (now.isoformat(), int(inv["id"])),
-        )
-        accepted += 1
-
-    conn.commit()
-    conn.close()
-    return accepted
-
-
-def list_orgs_system():
-    """System-wide org list (Hashmark operators only)."""
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, name, seat_limit, allowed_domains, created_at
-        FROM organizations
-        ORDER BY name ASC
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def delete_org(org_id: int) -> bool:
-    """Delete an org and all related data (memberships, invites) via cascade."""
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM organizations WHERE id = ?", (org_id,))
-    changed = cur.rowcount > 0
-    conn.commit()
-    conn.close()
-    return changed
-
-
-def set_team_admin(org_id: int, new_admin_user_id: int):
-    """Ensure exactly one ACTIVE ADMIN for the org: demote existing admins to COACH, then set new admin."""
-    conn = _connect()
-    cur = conn.cursor()
-
-    # Demote all active admins in this org
-    cur.execute(
-        """
-        UPDATE memberships
-        SET role = 'COACH'
-        WHERE org_id = ? AND is_active = 1 AND role = 'ADMIN'
-        """,
-        (org_id,),
-    )
-
-    # Upsert new admin membership
-    now = _utc_now_iso()
-    cur.execute(
-        """
-        INSERT INTO memberships (org_id, user_id, role, is_active, created_at)
-        VALUES (?, ?, 'ADMIN', 1, ?)
-        ON CONFLICT(org_id, user_id) DO UPDATE SET role='ADMIN', is_active=1
-        """,
-        (org_id, new_admin_user_id, now),
-    )
-
-    conn.commit()
-    conn.close()
-
-def list_users_system():
-    """System-wide user list (Hashmark operators only)."""
-    conn = _connect()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, email, is_active, provider, provider_subject, system_role, created_at
+    cur.execute("""
+        SELECT email_enc, role, created_at
         FROM users
         ORDER BY created_at DESC
-        """
-    )
+    """)
     rows = cur.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+
+    return [
+        {
+            "email": decrypt_email(row["email_enc"]) or "[unreadable email]",
+            "role": row["role"],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+# =========================================================
+# User Write Operations
+# =========================================================
+
+def attach_subject_to_user(email: str, subject: str):
+    # After a user successfully logs in with Microsoft, this links their stored account to the Microsoft provider subject.
+    # That way future lookups can use provider_subject directly.
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE users
+        SET provider_subject = ?, updated_at = ?
+        WHERE email_hash = ?
+        """,
+        (subject, _now_iso(), email_hash(email)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def upsert_user(email: str, role: str, provider_subject: Optional[str] = None):
+    # Inserts a new user if they do not exist,otherwise updates the existing user.
+    # This is useful when you want one function that handles both "create user" and "update user role" logic.
+    email_n = _normalize_email(email)
+    role_u = (role or "").strip().upper()
+
+    # Validate role before touching the DB.
+    if role_u not in ALLOWED_ROLES:
+        raise ValueError("invalid_role")
+
+    now = _now_iso()
+    hashed_email = email_hash(email_n)
+    encrypted_email = encrypt_email(email_n)
+
+    conn = _connect()
+    cur = conn.cursor()
+
+    # Check whether this user already exists.
+    cur.execute("SELECT * FROM users WHERE email_hash = ?", (hashed_email,))
+    existing = cur.fetchone()
+
+    if existing is None:
+        cur.execute(
+            """
+            INSERT INTO users (
+                email_hash,
+                email_enc,
+                role,
+                provider_subject,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (hashed_email, encrypted_email, role_u, provider_subject, now),
+        )
+    # If the user exists and we are now getting a provider_subject for the first time, attach it while updating role.
+    else:
+        if provider_subject and not (existing["provider_subject"] or ""):
+            cur.execute(
+                """
+                UPDATE users
+                SET role = ?, provider_subject = ?, updated_at = ?
+                WHERE email_hash = ?
+                """,
+                (role_u, provider_subject, now, hashed_email),
+            )
+        else:
+            # Otherwise just update the role.
+            cur.execute(
+                """
+                UPDATE users
+                SET role = ?, updated_at = ?
+                WHERE email_hash = ?
+                """,
+                (role_u, now, hashed_email),
+            )
+
+    conn.commit()
+    conn.close()
+
+
+def update_user_role(email: str, role: str):
+    # Updates the user's role.
+    # This is meant for admin actions like promote/demote.
+    email_n = _normalize_email(email)
+    role_u = (role or "").strip().upper()
+
+    if role_u not in ALLOWED_ROLES:
+        raise ValueError("invalid_role")
+
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE users
+        SET role = ?, updated_at = ?
+        WHERE email_hash = ?
+        """,
+        (role_u, _now_iso(), email_hash(email_n)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_user(email: str):
+    # Deletes a user from the system.
+    email_n = _normalize_email(email)
+
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM users WHERE email_hash = ?", (email_hash(email_n),))
+    conn.commit()
+    conn.close()
+
+
+# =========================================================
+# Admin / Role Synchronization
+# =========================================================
+
+def sync_super_admins(
+        
+    # Syncs the SUPER_ADMIN list from config / env into the database.
+    #
+    # Main idea:
+    # - every email in the provided list must become SUPER_ADMIN
+    # - if enforce=True, any existing SUPER_ADMIN not in the list
+    #   gets demoted
+
+    super_admin_emails: Iterable[str],
+    enforce: bool = False,
+    demote_to: str = "ADMIN",
+):
+    emails = {
+        _normalize_email(email)
+        for email in (super_admin_emails or [])
+        if email and email.strip()
+    }
+
+    # If nothing was passed in, do nothing.
+    if not emails:
+        return
+
+    conn = _connect()
+    cur = conn.cursor()
+    now = _now_iso()
+
+    # Make sure every configured super admin exists and has the right role.
+    for email in emails:
+        hashed_email = email_hash(email)
+
+        cur.execute("SELECT id FROM users WHERE email_hash = ?", (hashed_email,))
+        existing = cur.fetchone()
+
+        # If not in the DB yet, create them as SUPER_ADMIN.
+        if existing is None:
+            cur.execute(
+                """
+                INSERT INTO users (email_hash, email_enc, role, created_at)
+                VALUES (?, ?, 'SUPER_ADMIN', ?)
+                """,
+                (hashed_email, encrypt_email(email), now),
+            )
+        # If already there, force role to SUPER_ADMIN.
+        else:
+            cur.execute(
+                """
+                UPDATE users
+                SET role = 'SUPER_ADMIN', updated_at = ?
+                WHERE email_hash = ?
+                """,
+                (now, hashed_email),
+            )
+
+    # If enforcing, any SUPER_ADMIN not in the approved list should be demoted to the chosen fallback role.
+    if enforce:
+        demote_to = (demote_to or "ADMIN").strip().upper()
+        if demote_to not in {"ADMIN", "COACH"}:
+            demote_to = "ADMIN"
+
+        cur.execute("SELECT email_hash FROM users WHERE role = 'SUPER_ADMIN'")
+        current_hashes = [bytes(row[0]) for row in cur.fetchall()]
+        allowed_hashes = {email_hash(email) for email in emails}
+
+        for hashed_email in current_hashes:
+            if hashed_email not in allowed_hashes:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET role = ?, updated_at = ?
+                    WHERE email_hash = ?
+                    """,
+                    (demote_to, now, hashed_email),
+                )
+
+    conn.commit()
+    conn.close()

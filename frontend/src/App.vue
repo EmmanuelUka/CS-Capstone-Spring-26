@@ -1,465 +1,429 @@
-<script setup>
-import { ref, onMounted, computed } from "vue";
-import axios from "axios";
-import hashmarkLogo from "./assets/HashmarkLogoWHITE.svg";
-
-const API_BASE = "http://localhost:5000";
-
-const loading = ref(true);
-const me = ref(null);
-
-// NEW: simple in-app "pages"
-const view = ref("home"); // "home" | "account"
-
-const csrfToken = ref("");
-
-const orgs = ref([]);
-const selectedOrgId = ref("");
-
-const orgName = ref("");
-const adminEmail = ref("");
-const seatLimit = ref(25);
-
-const inviteEmail = ref("");
-const inviteRole = ref("COACH");
-
-const systemOrgs = ref([]);
-const systemOrgMembers = ref(null);
-
-const members = ref([]);
-
-const isSuperAdmin = computed(() => me.value?.systemRole === "SUPER_ADMIN");
-const isTeamAdmin = computed(() => me.value?.role === "ADMIN");
-
-const loginError = ref(null);
-
-function goHome() {
-  view.value = "home";
-}
-function goAccount() {
-  view.value = "account";
-}
-
-async function loadCsrf() {
-  const res = await axios.get(`${API_BASE}/api/csrf`, { withCredentials: true });
-  csrfToken.value = res.data.csrfToken;
-}
-
-async function loadMe() {
-  try {
-    const res = await axios.get(`${API_BASE}/api/me`, { withCredentials: true });
-    me.value = res.data?.email ? res.data : null;
-
-    // NEW: after login, land on Home
-    if (me.value) view.value = "home";
-    if (!me.value) view.value = "home";
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function loadOrgs() {
-  const res = await axios.get(`${API_BASE}/api/orgs`, { withCredentials: true });
-  orgs.value = res.data.orgs || [];
-  selectedOrgId.value = res.data.activeOrgId ? String(res.data.activeOrgId) : "";
-}
-
-async function setActiveOrg() {
-  if (!selectedOrgId.value) return;
-  await axios.post(
-    `${API_BASE}/api/set-org`,
-    { orgId: Number(selectedOrgId.value) },
-    {
-      withCredentials: true,
-      headers: { "X-CSRF-Token": csrfToken.value },
-    }
-  );
-  await loadMe();
-  await loadOrgs();
-}
-
-async function inviteMember() {
-  await axios.post(
-    `${API_BASE}/api/invite`,
-    { email: inviteEmail.value, role: inviteRole.value },
-    {
-      withCredentials: true,
-      headers: { "X-CSRF-Token": csrfToken.value },
-    }
-  );
-  inviteEmail.value = "";
-  inviteRole.value = "COACH";
-  await loadMembers();
-}
-
-async function loadMembers() {
-  const res = await axios.get(`${API_BASE}/api/members`, { withCredentials: true });
-  members.value = res.data.members || [];
-}
-
-async function changeMemberRole(userId, newRole) {
-  await axios.put(
-    `${API_BASE}/api/members/${userId}/role`,
-    { role: newRole },
-    {
-      withCredentials: true,
-      headers: { "X-CSRF-Token": csrfToken.value },
-    }
-  );
-  await loadMembers();
-}
-
-async function removeMember(userId) {
-  await axios.delete(`${API_BASE}/api/members/${userId}`, {
-    withCredentials: true,
-    headers: { "X-CSRF-Token": csrfToken.value },
-  });
-  await loadMembers();
-}
-
-async function loadSystemOrgs() {
-  const res = await axios.get(`${API_BASE}/api/system/orgs`, { withCredentials: true });
-  systemOrgs.value = res.data.orgs || [];
-}
-
-async function loadSystemOrgMembers(orgId) {
-  const res = await axios.get(`${API_BASE}/api/system/orgs/${orgId}/members`, {
-    withCredentials: true,
-  });
-  systemOrgMembers.value = res.data;
-}
-
-async function createOrgAndAdmin() {
-  await axios.post(
-    `${API_BASE}/api/system/create-org-admin`,
-    { orgName: orgName.value, adminEmail: adminEmail.value, seatLimit: seatLimit.value },
-    {
-      withCredentials: true,
-      headers: { "X-CSRF-Token": csrfToken.value },
-    }
-  );
-  orgName.value = "";
-  adminEmail.value = "";
-  seatLimit.value = 25;
-  await loadSystemOrgs();
-}
-
-async function setTeamAdmin(orgId, email) {
-  try {
-    await axios.put(
-      `${API_BASE}/api/system/orgs/${orgId}/admin`,
-      { email }, // backend expects email
-      {
-        withCredentials: true,
-        headers: { "X-CSRF-Token": csrfToken.value },
-      }
-    );
-
-    status.value = `Team admin changed to ${email}.`;
-    await loadSystemOrgMembers(orgId);
-    await loadMe();
-  } catch (e) {
-    const msg = e?.response?.data?.error || e?.message || "set_admin_failed";
-    status.value = `Set admin blocked: ${msg}`;
-  }
-}
-
-async function deleteOrg(orgId) {
-  await axios.delete(`${API_BASE}/api/system/orgs/${orgId}`, {
-    withCredentials: true,
-    headers: { "X-CSRF-Token": csrfToken.value },
-  });
-  systemOrgMembers.value = null;
-  await loadSystemOrgs();
-}
-
-async function loginMicrosoft() {
-  window.location.href = `${API_BASE}/auth/microsoft/login`;
-}
-
-async function logout() {
-  await axios.post(
-    `${API_BASE}/auth/logout`,
-    {},
-    {
-      withCredentials: true,
-      headers: { "X-CSRF-Token": csrfToken.value },
-    }
-  );
-  me.value = null;
-  view.value = "home";
-  orgs.value = [];
-  members.value = [];
-  systemOrgs.value = [];
-  systemOrgMembers.value = null;
-}
-
-onMounted(async () => {
-  // 🔴 Check for login error from backend redirect
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("error") === "invalid_access") {
-    loginError.value =
-      "Invalid access. No account found or you are not invited to a team.";
-    window.history.replaceState({}, document.title, "/");
-  }
-
-  await loadCsrf();
-  await loadMe();
-
-  if (me.value) {
-    await loadOrgs();
-    if (isTeamAdmin.value) await loadMembers();
-    if (isSuperAdmin.value) await loadSystemOrgs();
-  }
-});
-</script>
-
 <template>
   <div class="app-container">
     <div class="card">
-      <!-- Header -->
+      <!-- Top header/logo area -->
       <div class="header">
         <div class="logo">
-          <img :src="hashmarkLogo" alt="Hashmark Logo" />
+          <img src="./assets/HashmarkLogoWHITE.svg" alt="Hashmark Logo" />
         </div>
         <div>
-          <h1>Hashmark Recruiting Portal</h1>
-          <p>Secure Microsoft-based authentication</p>
+          <h1>Hashmark</h1>
+          <p>Recruiting Assistant</p>
         </div>
       </div>
 
-      <div v-if="loading">Loading...</div>
+      <!-- Initial loading state while checking session/user -->
+      <div v-if="loading" class="loading">Loading...</div>
 
-      <!-- NOT LOGGED IN -->
-      <div v-else-if="!me" class="login-section">
-        <p>You are not logged in.</p>
-        <div v-if="loginError" class="error-alert">
-          {{ loginError }}
-        </div>
-        <button class="primary-btn" @click="loginMicrosoft">
-          Sign in with Microsoft
-        </button>
-      </div>
+      <div v-else>
+        <!-- If no user is logged in, show login screen -->
+        <div v-if="!me" class="login-section">
+          <h2>Welcome!</h2>
+          <p>Sign in using your Microsoft account.</p>
 
-      <!-- LOGGED IN -->
-      <div v-else class="dashboard">
-        <!-- Simple top bar -->
-        <div class="topbar">
-          <div class="topbar-left">
-            <div class="topbar-title">Hashmark</div>
-            <div class="topbar-sub">
-              Signed in as <b>{{ me.email }}</b>
-            </div>
-          </div>
+          <button class="btn primary-btn" @click="loginMicrosoft">
+            Sign in with Microsoft
+          </button>
 
-          <div class="topbar-actions">
-            <button
-              v-if="view !== 'home'"
-              class="secondary-btn compact"
-              @click="goHome"
-            >
-              Home
-            </button>
-
-            <button
-              v-if="view !== 'account'"
-              class="secondary-btn compact"
-              @click="goAccount"
-            >
-              View account
-            </button>
-
-            <button class="secondary-btn compact" @click="logout">
-              Logout
-            </button>
-          </div>
+          <!-- General status message for login-related feedback -->
+          <p v-if="status" class="status">{{ status }}</p>
         </div>
 
-        <!-- LANDING PAGE (HOME) -->
-        <div v-if="view === 'home'" class="home">
-          <h2>Welcome, {{ me.name }}</h2>
-          <p class="muted">
-            This is the landing page after login.
-          </p>
-
-          <div class="home-grid">
-            <div class="home-card">
-              <h3>Account</h3>
-              <p class="muted">View your profile, teams, and permissions.</p>
-              <button class="primary-btn" @click="goAccount">View account</button>
-            </div>
-
-            <div class="home-card" v-if="me.orgId">
-              <h3>Active Team</h3>
-              <p class="muted">
-                Team ID: <b>{{ me.orgId }}</b>
-                <span v-if="me.role"> • Role: <b>{{ me.role }}</b></span>
-              </p>
-              <button class="secondary-btn compact" @click="goAccount">
-                View Team
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- ACCOUNT PAGE (your existing “profile/admin panels”) -->
-        <div v-else class="account">
+        <!-- If user is logged in, show dashboard -->
+        <div v-else class="dashboard">
           <div class="user-info">
-            <h2>Account</h2>
+            <h2>Welcome, {{ me.name }}</h2>
 
+            <!-- Basic logged-in user info -->
             <div class="user-meta">
-              <span><strong>Name:</strong> {{ me.name }}</span>
               <span><strong>Email:</strong> {{ me.email }}</span>
-              <span v-if="me.systemRole"><strong>System Role:</strong> {{ me.systemRole }}</span>
-              <span v-if="me.role"><strong>Team Role:</strong> {{ me.role }}</span>
-              <span v-else class="warn"><strong>Team:</strong> No team selected</span>
+              <span><strong>Role:</strong> {{ me.role }}</span>
             </div>
-          </div>
 
-          <!-- Org picker (if multi-org) -->
-          <div v-if="orgs.length > 0" class="admin-panel">
-            <h3>Teams</h3>
-            <p class="muted">Select which team you are actively working in.</p>
-
-            <div class="invite-form">
-              <select v-model="selectedOrgId">
-                <option value="">-- Select team --</option>
-                <option v-for="o in orgs" :key="o.id" :value="String(o.id)">
-                  {{ o.name }} ({{ o.role }})
-                </option>
-              </select>
-
-              <button class="secondary-btn compact" @click="setActiveOrg" :disabled="!selectedOrgId">
-                Set active team
+            <!-- User-level actions -->
+            <div class="user-actions">
+              <button class="btn secondary-btn" @click="refresh">Refresh</button>
+              <button class="btn secondary-btn danger-btn" @click="logout">
+                Logout
               </button>
             </div>
           </div>
 
-          <!-- Team Admin -->
-          <div v-if="isTeamAdmin && me.orgId" class="admin-panel">
-            <h3>Team Admin Panel</h3>
+          <!-- Admin/Super Admin only: Add User panel -->
+          <div v-if="isAdminOrSuper" class="admin-panel">
+            <h3>Add User</h3>
+            <p class="hint">Adds a new user</p>
 
-            <h4>Invite a member</h4>
-            <div class="invite-form">
-              <input v-model="inviteEmail" placeholder="email@domain.com" />
-              <select v-model="inviteRole">
+            <div class="user-form">
+              <input v-model="addEmail" placeholder="user@kent.edu" />
+
+              <!-- Only SUPER_ADMIN can create ADMIN accounts -->
+              <select v-model="addRole">
                 <option value="COACH">COACH</option>
-                <option value="SCOUT">SCOUT</option>
+                <option v-if="isSuperAdmin" value="ADMIN">ADMIN</option>
               </select>
-              <button class="primary-btn" @click="inviteMember" :disabled="!inviteEmail">
-                Invite
-              </button>
+
+              <button class="btn primary-btn" @click="addUser">Add</button>
             </div>
 
-            <h4 style="margin-top: 16px;">Members</h4>
-            <div class="members" v-if="members.length">
-              <div class="member-row" v-for="m in members" :key="m.user_id">
-                <div>
-                  <b>{{ m.email }}</b>
-                  <div class="muted">Role: {{ m.role }}</div>
-                </div>
-
-                <div class="invite-form" style="justify-content: flex-end;">
-
-                  <!-- Your own row -->
-                  <template v-if="m.user_id === me.userId">
-                    <span class="pill">You</span>
-                  </template>
-
-                  <!-- Team admin row (ADMIN) -->
-                  <template v-else-if="(m.role || '').toUpperCase() === 'ADMIN'">
-                    <span class="pill">TEAM ADMIN</span>
-                  </template>
-
-                  <!-- Normal members: allow change role + remove -->
-                  <template v-else>
-                    <select :value="m.role" @change="e => changeMemberRole(m.user_id, e.target.value)">
-                      <option value="COACH">COACH</option>
-                      <option value="SCOUT">SCOUT</option>
-                    </select>
-
-                    <button class="secondary-btn compact danger-btn" @click="removeMember(m.user_id)">
-                      Remove
-                    </button>
-                  </template>
-
-                </div>
-              </div>
-            </div>
-            <p v-else class="muted">No members loaded yet.</p>
+            <p class="status">{{ addStatus }}</p>
           </div>
 
-          <!-- System SUPER_ADMIN -->
-          <div v-if="isSuperAdmin" class="admin-panel">
-            <h3>System Admin Panel</h3>
+          <!-- Admin/Super Admin only: User directory -->
+          <div v-if="isAdminOrSuper" class="admin-panel">
+            <h3>User Directory</h3>
 
-            <h4>Create org + set team admin</h4>
-            <div class="invite-form">
-              <input v-model="orgName" placeholder="Organization name" />
-              <input v-model="adminEmail" placeholder="admin@email.com" />
-              <input v-model.number="seatLimit" type="number" min="1" placeholder="Seat limit" />
-              <button class="primary-btn" @click="createOrgAndAdmin" :disabled="!orgName || !adminEmail">
-                Create
-              </button>
-            </div>
+            <div v-if="usersLoading" class="loading">Loading users...</div>
 
-            <h4 style="margin-top: 16px;">Organizations</h4>
-            <div class="members" v-if="systemOrgs.length">
-              <div class="member-row" v-for="o in systemOrgs" :key="o.id">
-                <div>
-                  <b>{{ o.name }}</b>
-                  <div class="muted">Seats: {{ o.seat_limit }}</div>
-                </div>
+            <div v-else class="users-table">
+              <div class="users-head">
+                <span>Email</span>
+                <span>Role</span>
+                <span>Actions</span>
+              </div>
 
-                <div class="invite-form" style="justify-content: flex-end;">
-                  <button class="secondary-btn compact" @click="loadSystemOrgMembers(o.id)">
-                    View members
+              <div v-for="u in users" :key="u.email" class="users-row">
+                <span class="mono">{{ u.email }}</span>
+                <span>{{ u.role }}</span>
+
+                <span class="row-actions">
+                  <button
+                    v-if="isAdmin && canAdminToggle(u)"
+                    class="btn secondary-btn small danger-btn"
+                    @click="deleteUserAccount(u)"
+                  >
+                    Delete
                   </button>
-                  <button class="secondary-btn compact danger-btn" @click="deleteOrg(o.id)">
-                    Delete org
+
+                  <button
+                    v-if="isSuperAdmin && canSuperToggle(u)"
+                    class="btn secondary-btn small danger-btn"
+                    @click="deleteUserAccount(u)"
+                  >
+                    Delete
                   </button>
-                </div>
+
+                  <button
+                    v-if="isSuperAdmin && canPromoteToAdmin(u)"
+                    class="btn secondary-btn small"
+                    @click="setRole(u.email, 'ADMIN')"
+                  >
+                    Promote to ADMIN
+                  </button>
+
+                  <button
+                    v-if="isSuperAdmin && canDemoteAdmin(u)"
+                    class="btn secondary-btn small"
+                    @click="setRole(u.email, 'COACH')"
+                  >
+                    Demote ADMIN
+                  </button>
+                </span>
               </div>
             </div>
 
-            <div v-if="systemOrgMembers" class="admin-panel">
-              <h4>Org Members: {{ systemOrgMembers.org?.name }}</h4>
-              <p class="muted">
-                Seats used: {{ systemOrgMembers.seatsUsed }} / {{ systemOrgMembers.org?.seat_limit }}
-              </p>
-
-              <div class="members" v-if="systemOrgMembers.members?.length">
-                <div class="member-row" v-for="m in systemOrgMembers.members" :key="m.user_id">
-                  <div>
-                    <b>{{ m.email }}</b>
-                    <div class="muted">Role: {{ m.role }}</div>
-                  </div>
-
-                  <div class="invite-form" style="justify-content: flex-end;">
-                    <button
-                      v-if="(m.role || '').toUpperCase() !== 'ADMIN'"
-                      class="secondary-btn compact"
-                      @click="setTeamAdmin(systemOrgMembers.org.id, m.email)"
-                    >
-                      Set as TEAM ADMIN
-                    </button>
-                    <span v-else class="pill">Current TEAM ADMIN</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <p class="status">{{ usersStatus }}</p>
           </div>
 
-          <!-- No org access -->
-          <div v-if="!me.orgId && !isSuperAdmin" class="admin-panel">
-            <h3>Access pending</h3>
-            <p>
-              You're signed in, but you don't have access to a team yet.
-              Ask your team admin to invite you.
-            </p>
-          </div>
+          <p v-if="status" class="status">{{ status }}</p>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<script setup>
+import { computed, onMounted, ref } from "vue";
+import api from "./api";
+
+// =========================================================
+// Config / API
+// =========================================================
+
+// Backend base URL from Vite env, fallback to local Flask dev server
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// =========================================================
+// Reactive State
+// =========================================================
+
+// Main loading state while app checks current login/session
+const loading = ref(true);
+
+// General-purpose status text shown in UI
+const status = ref("");
+
+// Holds the current logged-in user object from /api/me
+const me = ref(null);
+
+// Stores current CSRF token used for protected write requests
+const csrfToken = ref("");
+
+// Add user form state
+const addEmail = ref("");
+const addRole = ref("COACH");
+const addStatus = ref("");
+
+// user directory state
+const users = ref([]);
+const usersLoading = ref(false);
+const usersStatus = ref("");
+
+// =========================================================
+// Computed Role Helpers
+// =========================================================
+
+const isSuperAdmin = computed(() => me.value?.role === "SUPER_ADMIN");
+const isAdmin = computed(() => me.value?.role === "ADMIN");
+const isAdminOrSuper = computed(() => isAdmin.value || isSuperAdmin.value);
+
+// =========================================================
+// Axios Request Hook
+// =========================================================
+
+// Automatically attach CSRF token to any state-changing request
+api.interceptors.request.use((config) => {
+  const method = (config.method || "get").toLowerCase();
+
+  if (["post", "put", "patch", "delete"].includes(method) && csrfToken.value) {
+    config.headers["X-CSRF-Token"] = csrfToken.value;
+  }
+
+  return config;
+});
+
+// =========================================================
+// Utility Helpers
+// =========================================================
+
+// Reads auth_error from the URL after backend redirect
+// and turns it into a user-friendly message.
+function consumeAuthErrorFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+
+  const code = params.get("auth_error");
+  const auth = params.get("auth");
+
+  const messages = {
+    invalid_state: "Login failed (invalid session state). Please try again.",
+    missing_code: "Login failed (missing authorization code). Please try again.",
+    token_failed: "Login failed while signing in. Please try again.",
+    graph_timeout: "Microsoft took too long to respond. Please try again.",
+    graph_failed: "Login failed while contacting Microsoft. Please try again.",
+    domain_not_allowed: "Access denied: your email domain is not allowed.",
+    access_not_granted: "Access not granted. Contact your administrator.",
+  };
+
+  // Handle normal auth_error codes
+  if (code) {
+    if (!messages[code]) {
+      console.warn("Unknown auth_error received from backend:", code);
+    }
+
+    status.value = messages[code] || "Login failed. Please try again.";
+    params.delete("auth_error");
+  }
+
+  // Handle ?auth=denied case
+  else if (auth === "denied") {
+    status.value = "Access denied. Contact your administrator.";
+    params.delete("auth");
+  }
+
+  if (!code && auth !== "denied") return;
+
+  const newQuery = params.toString();
+  const newUrl =
+    window.location.pathname +
+    (newQuery ? `?${newQuery}` : "") +
+    window.location.hash;
+
+  window.history.replaceState({}, "", newUrl);
+}
+
+function isSelf(user) {
+  return (user.email || "").toLowerCase() === (me.value?.email || "").toLowerCase();
+}
+
+// =========================================================
+// Auth / Session Loaders
+// =========================================================
+
+// Loads CSRF token from backend
+async function loadCsrf() {
+  try {
+    const res = await api.get("/api/csrf");
+    csrfToken.value = res.data?.csrfToken || "";
+  } catch {
+    csrfToken.value = "";
+  }
+}
+
+// Loads current session user from backend
+async function loadMe() {
+  loading.value = true;
+
+  try {
+    const res = await api.get("/api/me");
+    me.value = res.data?.email ? res.data : null;
+  } catch {
+    me.value = null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+// Loads all users for the user directory.
+// Only runs if current user is ADMIN or SUPER_ADMIN.
+async function loadUsers() {
+  if (!isAdminOrSuper.value) return;
+
+  usersLoading.value = true;
+  usersStatus.value = "";
+
+  try {
+    const res = await api.get("/api/users");
+    users.value = (res.data?.users || []).map((user) => ({ ...user }));
+  } catch (e) {
+    usersStatus.value =
+      "Failed to load users: " + (e.response?.data?.error || e.message);
+  } finally {
+    usersLoading.value = false;
+  }
+}
+
+// =========================================================
+// Auth Actions
+// =========================================================
+
+// Sends browser to backend Microsoft login route
+function loginMicrosoft() {
+  window.location.href = `${API_BASE}/auth/microsoft/login`;
+}
+
+// Logs user out, clears local state, then reloads fresh session/csrf state
+async function logout() {
+  await api.post("/auth/logout");
+  me.value = null;
+  users.value = [];
+
+  await loadCsrf();
+  await loadMe();
+}
+
+// Refreshes the app state manually
+async function refresh() {
+  status.value = "";
+  addStatus.value = "";
+  usersStatus.value = "";
+
+  await loadCsrf();
+  await loadMe();
+  await loadUsers();
+}
+
+// =========================================================
+// Admin Actions
+// =========================================================
+
+// Adds a new user through backend admin route
+async function addUser() {
+  addStatus.value = "Adding...";
+
+  try {
+    const res = await api.post("/api/users", {
+      email: addEmail.value,
+      role: addRole.value,
+    });
+
+    const resultStatus = res?.data?.status;
+
+    if (resultStatus === "user_exists") {
+      addStatus.value = "That user already exists. No changes were made.";
+    } else if (resultStatus === "created") {
+      addStatus.value = "Added. They can now sign in.";
+      addEmail.value = "";
+    } else {
+      addStatus.value = "Done.";
+      addEmail.value = "";
+    }
+
+    await loadUsers();
+  } catch (e) {
+    const err = e.response?.data?.error || e.message;
+    addStatus.value = "Add failed: " + err;
+  }
+}
+
+// Deletes a user account
+async function deleteUserAccount(user) {
+  usersStatus.value = "";
+
+  try {
+    await api.delete("/api/users", {
+      data: { email: user.email },
+    });
+    await loadUsers();
+  } catch (e) {
+    usersStatus.value =
+      "Delete failed: " + (e.response?.data?.error || e.message);
+  }
+}
+
+// Updates a user's role
+async function setRole(email, role) {
+  usersStatus.value = "";
+
+  try {
+    await api.patch("/api/users/role", { email, role });
+    await loadUsers();
+  } catch (e) {
+    usersStatus.value =
+      "Role update failed: " + (e.response?.data?.error || e.message);
+  }
+}
+
+// =========================================================
+// Permission Helpers
+// =========================================================
+
+// ADMIN can only delete COACH users, and never themselves
+function canAdminToggle(user) {
+  if (isSelf(user)) return false;
+  const role = (user.role || "").toUpperCase();
+  return role === "COACH";
+}
+
+// SUPER_ADMIN can delete anyone except another SUPER_ADMIN and self
+function canSuperToggle(user) {
+  if (isSelf(user)) return false;
+  const role = (user.role || "").toUpperCase();
+  return role !== "SUPER_ADMIN";
+}
+
+// SUPER_ADMIN can promote COACH to ADMIN
+function canPromoteToAdmin(user) {
+  if (isSelf(user)) return false;
+  const role = (user.role || "").toUpperCase();
+  return role === "COACH";
+}
+
+// SUPER_ADMIN can demote ADMIN to COACH
+function canDemoteAdmin(user) {
+  if (isSelf(user)) return false;
+  const role = (user.role || "").toUpperCase();
+  return role === "ADMIN";
+}
+
+// =========================================================
+// Lifecycle
+// =========================================================
+
+// On first mount, load auth error (if any), csrf, current user, and user list
+onMounted(async () => {
+  consumeAuthErrorFromUrl();
+  await loadCsrf();
+  await loadMe();
+  await loadUsers();
+});
+</script>
