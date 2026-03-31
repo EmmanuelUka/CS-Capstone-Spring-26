@@ -1181,6 +1181,22 @@ def api_delete_user():
     delete_user(email)
     return jsonify({"ok": True})
 
+# =========================================================
+# Data Endpoints For The Frontend
+# =========================================================
+
+### End endpoint should check that the user has a valid session. Otherwise, prompt user to log in again
+
+@app.route("/data")
+def get_data():
+    # Assume this dictionary already exists
+    data = {
+        "name": "Alice",
+        "age": 25,
+        "skills": ["Python", "Flask", "JavaScript"]
+    }
+
+    return jsonify(data)
 
 # =========================================================
 # Local Dev Entrypoint
