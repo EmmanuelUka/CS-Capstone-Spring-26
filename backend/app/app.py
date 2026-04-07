@@ -7,7 +7,7 @@ import uuid
 from datetime import timedelta
 from functools import wraps
 from logging.handlers import RotatingFileHandler
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import msal
 import requests
@@ -205,7 +205,27 @@ def _redirect_frontend_error(code: str):
     # Redirect the user back to the frontend with an auth error code so the UI
     # can display the correct message.
     query = urlencode({"auth_error": code})
-    return redirect(f"{FRONTEND_URL}/?{query}")
+    return redirect(f"{_get_frontend_redirect_base()}/?{query}")
+
+
+def _is_allowed_frontend_origin(candidate: str) -> bool:
+    # Restrict callback redirect targets to configured frontend origins.
+    if not candidate:
+        return False
+
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+
+    origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    return origin in API_ORIGINS or origin == FRONTEND_URL
+
+
+def _get_frontend_redirect_base() -> str:
+    # Use a validated per-login return target when present, otherwise fall back
+    # to the configured default frontend URL.
+    candidate = (session.get("frontend_return_to") or "").rstrip("/")
+    return candidate if _is_allowed_frontend_origin(candidate) else FRONTEND_URL
 
 
 def _email_domain_allowed(email: str) -> bool:
@@ -576,6 +596,11 @@ def microsoft_login():
     session.clear()
     session.permanent = True
 
+    return_to = (request.args.get("return_to") or "").strip().rstrip("/")
+    session["frontend_return_to"] = (
+        return_to if _is_allowed_frontend_origin(return_to) else FRONTEND_URL
+    )
+
     msal_app = _build_msal_app()
     state = str(uuid.uuid4())
 
@@ -695,7 +720,7 @@ def microsoft_callback():
             endpoint=request.path,
             request_id=rid,
         )
-        return redirect(FRONTEND_URL + "/?auth=denied")
+        return redirect(_get_frontend_redirect_base() + "/?auth=denied")
 
     # Check if the email domain is allowed.
     if not _email_domain_allowed(email):
@@ -736,7 +761,7 @@ def microsoft_callback():
             **_log_identity_fields("user", email),
             **_log_subject_fields(subject),
         )
-        return redirect(FRONTEND_URL + "/")
+        return redirect(_get_frontend_redirect_base() + "/")
 
     # First try matching on provider subject if available.
     if subject:
@@ -759,7 +784,7 @@ def microsoft_callback():
                 **_log_identity_fields("user", email),
                 **_log_subject_fields(subject),
             )
-            return redirect(FRONTEND_URL + "/")
+            return redirect(_get_frontend_redirect_base() + "/")
 
     # If subject match did not work, fall back to email match.
     user = get_user_by_email(email)
@@ -795,7 +820,7 @@ def microsoft_callback():
             **_log_identity_fields("user", email),
             **_log_subject_fields(subject),
         )
-        return redirect(FRONTEND_URL + "/")
+        return redirect(_get_frontend_redirect_base() + "/")
 
     # If no matching approved user exists, deny access.
     _log_event(
