@@ -34,6 +34,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS players (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            team_name TEXT,
             position_id INTEGER,
             FOREIGN KEY (position_id) REFERENCES positions(id)
         );
@@ -88,12 +89,12 @@ def insert_position(name):
         return cursor.lastrowid
 
 
-def insert_player(name, position_id=None):
+def insert_player(name, team_name=None, position_id=None):
     with get_conn() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO players (name, position_id) VALUES (?, ?)",
-            (name, position_id),
+            "INSERT INTO players (name, team_name, position_id) VALUES (?, ?, ?)",
+            (name, team_name, position_id),
         )
         return cursor.lastrowid
 
@@ -149,15 +150,16 @@ def assign_player_to_scheme_position(scheme_position_id, player_id):
 # ---------------------------
 # UPDATE FUNCTIONS
 # ---------------------------
-def update_player(player_id, name=None, position_id=None):
+def update_player(player_id, name=None, team_name=None, position_id=None):
     with get_conn() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE players
             SET name = COALESCE(?, name),
+                team_name = COALESCE(?, team_name),
                 position_id = COALESCE(?, position_id)
             WHERE id = ?
-        """, (name, position_id, player_id))
+        """, (name, team_name, position_id, player_id))
 
 
 def update_stat(stat_id, name=None, position_id=None):
@@ -221,6 +223,7 @@ def get_all_players_with_stats():
         SELECT 
             p.id AS player_id,
             p.name AS player_name,
+            p.team_name AS team_name,
             s.name AS stat_name,
             ps.value
         FROM players p
@@ -233,7 +236,7 @@ def get_all_players_with_stats():
 def get_players_stats_pivot():
     df = get_all_players_with_stats()
     pivot = df.pivot_table(
-        index=["player_id", "player_name"],
+        index=["player_id", "player_name", "team_name"],
         columns="stat_name",
         values="value"
     ).reset_index()
@@ -307,11 +310,11 @@ def get_or_create_position(position_name):
 # ---------------------------
 def bulk_insert_players(players):
     """
-    players = [(name, position_id), ...]
+    players = [(name, team_name, position_id), ...]
     """
     with get_conn() as conn:
         conn.executemany(
-            "INSERT INTO players (name, position_id) VALUES (?, ?)",
+            "INSERT INTO players (name, team_name, position_id) VALUES (?, ?, ?)",
             players
         )
 
@@ -328,21 +331,19 @@ if __name__ == "__main__":
     rb_id = insert_position("RB")
     wr_id = insert_position("WR")
 
-    player_id = insert_player("Tom Brady", qb_id)
+    player_id = insert_player("Tom Brady", position_id=qb_id)
 
     # Bulk Insert New Players Into Database (without stats, probably will not be used often)
     players = [
-        ("Patrick Mahomes", qb_id),
-        ("Derrick Henry", rb_id),
-        ("Christian McCaffrey", rb_id),
-        ("Justin Jefferson", wr_id),
-        ("Tyreek Hill", wr_id),
+        ("Patrick Mahomes", None, qb_id),
+        ("Derrick Henry", "The Falcons", rb_id),
+        ("Christian McCaffrey", None, rb_id),
+        ("Justin Jefferson", None, wr_id),
+        ("Tyreek Hill", None, wr_id),
     ]
     bulk_insert_players(players)
 
-    
-
-    stat_id = insert_stat("passing_yards", qb_id)
+    stat_id = insert_stat("passing_yards", position_id=qb_id)
     insert_player_stat(player_id, stat_id, 4500)
 
     print("ID of passing yards stat for Quarter-Backs: ", get_stat_id("passing_yards", qb_id))
