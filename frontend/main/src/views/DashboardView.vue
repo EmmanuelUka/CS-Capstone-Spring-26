@@ -1,0 +1,269 @@
+<script setup>
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+import { activityFeed } from '../data/mockRecruitingData'
+import { useRecruitingStore } from '../store/useRecruitingStore'
+
+const router = useRouter()
+const { state } = useRecruitingStore()
+
+const readyPlayers = computed(() =>
+  state.players.filter((player) => player.evaluationStatus === 'Ready')
+)
+
+const compareQueue = computed(() =>
+  state.players.filter((player) => player.evaluationStatus === 'Compare')
+)
+
+const averageRating = computed(() =>
+  Math.round(state.players.reduce((sum, player) => sum + player.rating, 0) / state.players.length)
+)
+
+const featuredPlayers = computed(() => state.players.slice(0, 3))
+const shortlistSummaries = computed(() =>
+  state.shortlists.map((list) => ({
+    ...list,
+    filledCount: list.slots.filter((slot) => slot.playerId).length,
+    totalCount: list.slots.length,
+  }))
+)
+</script>
+
+<template>
+  <section class="page-grid">
+    <section class="hero-panel surface-panel">
+      <p class="page-kicker section-label">Dashboard</p>
+      <h2>Stay on top of the recruiting board from one screen.</h2>
+      <p class="page-copy">
+        Snapshot the active board, recent work, and the players most likely to move into the next decision window.
+      </p>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span>Total Players</span>
+          <strong>{{ state.players.length }}</strong>
+          <p>Current mock board under review.</p>
+        </article>
+        <article class="stat-card">
+          <span>Comparisons Run</span>
+          <strong>{{ compareQueue.length + 18 }}</strong>
+          <p>Recent comparison passes in the cycle.</p>
+        </article>
+        <article class="stat-card">
+          <span>Ready Evaluations</span>
+          <strong>{{ readyPlayers.length }}</strong>
+          <p>Players ready for staff conversation now.</p>
+        </article>
+        <article class="stat-card">
+          <span>Avg Rating</span>
+          <strong>{{ averageRating }}</strong>
+          <p>Board quality benchmark across the dataset.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="stack-panel surface-panel">
+      <div class="panel-header">
+        <div>
+          <p class="page-kicker section-label">Recent Recruits</p>
+          <h3>Immediate attention</h3>
+        </div>
+        <button class="text-link" type="button" @click="router.push('/players')">Open board</button>
+      </div>
+
+      <div class="recruit-list">
+        <button
+          v-for="player in featuredPlayers"
+          :key="player.id"
+          class="recruit-row"
+          type="button"
+          @click="router.push(`/players/${player.id}`)"
+        >
+          <div>
+            <strong>{{ player.name }}</strong>
+            <p>{{ player.position }} • {{ player.school }}</p>
+          </div>
+          <span>{{ player.rating }}</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="stack-panel surface-panel">
+      <div class="panel-header">
+        <div>
+          <p class="page-kicker section-label">Activity</p>
+          <h3>Recent movement</h3>
+        </div>
+      </div>
+
+      <div class="activity-list">
+        <article v-for="item in activityFeed" :key="item.id" class="activity-row">
+          <div class="activity-dot" />
+          <div>
+            <strong>{{ item.label }}</strong>
+            <p>{{ item.detail }}</p>
+          </div>
+          <span>{{ item.time }}</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="stack-panel surface-panel">
+      <div class="panel-header">
+        <div>
+          <p class="page-kicker section-label">Shortlists</p>
+          <h3>Board groups</h3>
+        </div>
+        <button class="text-link" type="button" @click="router.push('/shortlists')">Manage</button>
+      </div>
+
+      <div class="shortlist-grid">
+        <article v-for="list in shortlistSummaries" :key="list.id" class="shortlist-card">
+          <span class="swatch" :style="{ background: list.color }" />
+          <strong>{{ list.name }}</strong>
+          <p>{{ list.filledCount }} of {{ list.totalCount }} positions filled</p>
+        </article>
+      </div>
+    </section>
+  </section>
+</template>
+
+<style scoped>
+.page-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.hero-panel h2,
+.panel-header h3 {
+  margin: 0.3rem 0 0;
+}
+
+.page-copy {
+  margin: 0;
+  max-width: 42rem;
+  color: rgba(242, 236, 227, 0.72);
+}
+
+.stats-grid,
+.shortlist-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.stat-card,
+.shortlist-card {
+  padding: 0.95rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stat-card span,
+.shortlist-card p {
+  color: rgba(242, 236, 227, 0.6);
+}
+
+.stat-card strong {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.6rem;
+}
+
+.stat-card p,
+.recruit-row p,
+.activity-row p,
+.shortlist-card p {
+  margin: 0.35rem 0 0;
+}
+
+.panel-header,
+.recruit-row,
+.activity-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.text-link,
+.recruit-row {
+  cursor: pointer;
+}
+
+.text-link {
+  padding: 0;
+  background: transparent;
+  color: #ffb75e;
+  font-weight: 800;
+}
+
+.recruit-list,
+.activity-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.recruit-row {
+  align-items: center;
+  padding: 0.95rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+}
+
+.recruit-row span {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #ffcd7a;
+}
+
+.activity-row {
+  align-items: start;
+  padding: 0.95rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.activity-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: #79c8ff;
+}
+
+.activity-row > div:nth-child(2) {
+  flex: 1;
+}
+
+.activity-row span:last-child {
+  color: rgba(242, 236, 227, 0.5);
+  font-size: 0.8rem;
+}
+
+.shortlist-card {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.swatch {
+  width: 2rem;
+  height: 0.45rem;
+  border-radius: 999px;
+}
+
+@media (min-width: 880px) {
+  .page-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  }
+
+  .hero-panel {
+    grid-column: 1 / -1;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+</style>

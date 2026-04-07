@@ -1,14 +1,65 @@
+<script setup>
+import { onMounted, ref } from 'vue'
+
+import AppShellHeader from '../components/AppShellHeader.vue'
+import PlayerCard from '../components/PlayerCard.vue'
+import testPlayers from '../data/testplayers.json'
+
+defineProps({
+  authBusy: {
+    type: Boolean,
+    default: false,
+  },
+  authLoading: {
+    type: Boolean,
+    default: false,
+  },
+  authStatus: {
+    type: String,
+    default: '',
+  },
+  isAuthenticated: {
+    type: Boolean,
+    default: false,
+  },
+  user: {
+    type: Object,
+    default: null,
+  },
+})
+
+const emit = defineEmits(['navigate'])
+
+const players = ref([])
+const loading = ref(true)
+
+onMounted(() => {
+  players.value = Array.isArray(testPlayers) ? testPlayers : []
+  loading.value = false
+})
+</script>
+
 <template>
   <section class="player-cards-page">
     <div class="page-shell">
-      <header class="page-header">
-        <p class="eyebrow">Hashmark Recruiting Assistant</p>
-        <h1>Evaluation Card Demo</h1>
-        <p class="page-copy">
-          FIFA-style recruiting cards using the system's real evaluation concepts:
-          historical comparison, scheme fit, confidence, and transparent explanation.
-        </p>
-      </header>
+      <AppShellHeader
+        eyebrow="Evaluation Surface"
+        title="Recruiting cards with a stronger presentation layer."
+        description="The card board now sits inside the same warmer shell as the landing page, so the demo reads like part of a product instead of a separate prototype."
+      />
+
+      <section class="board-summary">
+        <div class="summary-card">
+          <span>Board Mode</span>
+          <strong>{{ loading ? 'Loading roster' : `${players.length} cards ready` }}</strong>
+          <p>Tap a card to flip it and inspect scoring, context, and AI explanation details.</p>
+        </div>
+        <div class="summary-card">
+          <span>Scoring Signals</span>
+          <strong>Comparison, fit, confidence</strong>
+          <p>The layout emphasizes fast top-line review without hiding the reasoning behind each score.</p>
+        </div>
+      </section>
 
       <p v-if="loading" class="state-message">Loading players...</p>
       <p v-else-if="!players.length" class="state-message">No players found.</p>
@@ -24,66 +75,57 @@
   </section>
 </template>
 
-<script setup>
-import { onMounted, ref } from 'vue'
-
-import PlayerCard from '../components/PlayerCard.vue'
-import testPlayers from '../data/testplayers.json'
-
-const players = ref([])
-const loading = ref(true)
-
-onMounted(() => {
-  players.value = Array.isArray(testPlayers) ? testPlayers : []
-  loading.value = false
-})
-</script>
-
 <style scoped>
 .player-cards-page {
-  min-height: 100vh;
-  padding: 2rem;
-  background:
-    radial-gradient(circle at top, rgba(245, 194, 66, 0.18), transparent 24%),
-    linear-gradient(180deg, #09111f 0%, #101827 50%, #1b2434 100%);
-  color: #f8fafc;
+  min-height: calc(100vh - 4rem);
+  color: var(--text);
 }
 
 .page-shell {
-  width: min(1240px, 100%);
-  margin: 0 auto;
+  width: 100%;
 }
 
-.page-header {
-  margin-bottom: 2rem;
+.board-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.4rem;
 }
 
-.eyebrow {
-  margin: 0 0 0.45rem;
-  font-size: 0.84rem;
+.summary-card {
+  padding: 1.15rem 1.2rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 193, 114, 0.08), transparent 36%),
+    rgba(27, 20, 17, 0.86);
+  box-shadow: var(--shadow-md);
+}
+
+.summary-card span {
+  color: var(--text-subtle);
+  font-size: 0.76rem;
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #fbbf24;
 }
 
-.page-header h1 {
-  margin: 0;
-  font-size: clamp(2.2rem, 4vw, 3.6rem);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
+.summary-card strong {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 1.2rem;
+  letter-spacing: -0.03em;
 }
 
-.page-copy {
-  max-width: 48rem;
-  margin: 0.85rem 0 0;
-  line-height: 1.65;
-  color: rgba(226, 232, 240, 0.82);
+.summary-card p {
+  margin: 0.45rem 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
 }
 
 .state-message {
-  padding: 2rem 0;
-  color: rgba(226, 232, 240, 0.88);
+  padding: 1.5rem 0;
+  color: var(--text-muted);
 }
 
 .card-grid {
@@ -94,7 +136,11 @@ onMounted(() => {
 
 @media (max-width: 640px) {
   .player-cards-page {
-    padding: 1.2rem;
+    min-height: calc(100vh - 2.4rem);
+  }
+
+  .board-summary {
+    grid-template-columns: 1fr;
   }
 }
 </style>
