@@ -538,7 +538,7 @@ def evaluate(
     Returns:
         EvaluationResult with top_matches sorted best → worst by final_score.
     """
-    w = weights or {"physical": 0.35, "production": 0.35, "context": 0.25}
+    w = weights or {"physical": 0.35, "production": 0.35, "context": 0.30}
     assert abs(sum(w.values()) - 1.0) < 1e-6, "Weights must sum to 1.0"
 
     pos       = recruit.position.upper()
