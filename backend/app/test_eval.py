@@ -144,6 +144,16 @@ def print_result(result: EvaluationResult) -> None:
     print(f"  Compared against {result.total_compared} historical players")
     print(f"{'=' * 60}")
 
+    rp = result.recruit_profile
+    print(f"\n  -- Recruit Profile --")
+    print(f"     Height: {rp.height}  Weight: {rp.weight}")
+    print(f"     Context multiplier: {rp.context_multiplier}")
+    print(f"     Confidence: {rp.confidence:.2%}")
+    if rp.stats:
+        print(f"     Stats:")
+        for k, v in rp.stats.items():
+            print(f"       {k}: {v}")
+
     if not result.top_matches:
         print("  No comparable players found.\n")
         return
@@ -341,10 +351,10 @@ def test_no_comparables():
 if __name__ == "__main__":
     print("\nEval system test run")
     print(f"Career profiles built: {len(career_profiles)}")
-    for cp in career_profiles:
-        print(f"  {cp.player_id:10s}  {cp.name:20s}  {cp.position:4s}  "
-              f"last_season={cp.last_season}  "
-              f"h={cp.height} w={cp.weight}  conf={cp.conference}")
+    for cpro in career_profiles:
+        print(f"  {cpro.player_id:10s}  {cpro.name:20s}  {cpro.position:4s}  "
+              f"last_season={cpro.last_season}  "
+              f"h={cpro.height} w={cpro.weight}  conf={cpro.conference}")
 
     test_hs_wr()
     test_transfer_qb()

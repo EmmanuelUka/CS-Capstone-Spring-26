@@ -302,12 +302,26 @@ class PlayerMatch:
 
 
 @dataclass
+class RecruitProfile:
+    """
+    The recruit's own physical, production, and context values —
+    normalized relative to the comparable pool for this position.
+    """
+    height:             Optional[float]   # raw inches
+    weight:             Optional[float]   # raw lbs
+    stats:              dict[str, Optional[float]]   # raw stat values
+    context_multiplier: Optional[float]   # state×school or conf×playing_time
+    confidence:         float             # fraction of fields that were present
+
+
+@dataclass
 class EvaluationResult:
-    recruit_name:   str
-    position:       str
-    recruit_type:   RecruitType
-    top_matches:    list[PlayerMatch]   # sorted best → worst
-    total_compared: int
+    recruit_name:    str
+    position:        str
+    recruit_type:    RecruitType
+    recruit_profile: RecruitProfile       # the recruit's own data
+    top_matches:     list[PlayerMatch]    # sorted best → worst
+    total_compared:  int
 
 
 # ---------------------------------------------------------------------------
@@ -550,6 +564,13 @@ def evaluate(
             recruit_name=recruit.name,
             position=recruit.position,
             recruit_type=recruit.recruit_type,
+            recruit_profile=RecruitProfile(
+                height=recruit.height,
+                weight=recruit.weight,
+                stats={k: recruit.get_stat(k) for k in stat_keys},
+                context_multiplier=_recruit_context_multiplier(recruit),
+                confidence=0.0,
+            ),
             top_matches=[],
             total_compared=0,
         )
@@ -603,10 +624,27 @@ def evaluate(
 
     matches.sort(key=lambda m: m.final_score, reverse=True)
 
+    recruit_stat_fields = {k: recruit.get_stat(k) for k in stat_keys}
+    recruit_missing = (
+        (0 if recruit.height is not None else 1) +
+        (0 if recruit.weight is not None else 1) +
+        sum(1 for v in recruit_stat_fields.values() if v is None) +
+        (0 if _recruit_context_multiplier(recruit) is not None else 1)
+    )
+    recruit_total = 2 + len(stat_keys) + 1  # height, weight, stats, context
+    recruit_profile = RecruitProfile(
+        height=recruit.height,
+        weight=recruit.weight,
+        stats=recruit_stat_fields,
+        context_multiplier=_recruit_context_multiplier(recruit),
+        confidence=round(_confidence(recruit_total, recruit_missing), 4),
+    )
+
     return EvaluationResult(
         recruit_name=recruit.name,
         position=recruit.position,
         recruit_type=recruit.recruit_type,
+        recruit_profile=recruit_profile,
         top_matches=matches[:top_n],
         total_compared=len(matches),
     )
