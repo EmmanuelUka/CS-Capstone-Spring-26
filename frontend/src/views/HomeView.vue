@@ -146,8 +146,8 @@ function handleCardSelect(cardId) {
   border-radius: var(--radius-xl);
   border: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(255, 202, 125, 0.09), transparent 32%),
-    var(--bg-panel);
+    linear-gradient(180deg, rgba(217, 151, 0, 0.08), transparent 32%),
+    rgba(18, 30, 49, 0.9);
   box-shadow: var(--shadow-lg);
 }
 
@@ -185,8 +185,8 @@ function handleCardSelect(cardId) {
 .brief-card {
   padding: 1rem 1.05rem;
   border-radius: var(--radius-md);
-  background: rgba(255, 246, 232, 0.04);
-  border: 1px solid rgba(255, 239, 208, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
 }
 
 .hero-metric span,
@@ -224,7 +224,7 @@ function handleCardSelect(cardId) {
   gap: 0.9rem;
   align-items: start;
   padding-top: 0.95rem;
-  border-top: 1px solid rgba(255, 239, 208, 0.08);
+  border-top: 1px solid var(--line);
 }
 
 .rail-kicker {
@@ -253,8 +253,8 @@ function handleCardSelect(cardId) {
 
 .brief-panel {
   background:
-    linear-gradient(180deg, rgba(255, 149, 90, 0.08), transparent 35%),
-    rgba(31, 21, 18, 0.88);
+    linear-gradient(180deg, rgba(137, 190, 229, 0.08), transparent 35%),
+    rgba(29, 24, 35, 0.9);
 }
 
 .brief-grid {

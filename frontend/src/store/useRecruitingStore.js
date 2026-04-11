@@ -16,6 +16,29 @@ const defaultFilters = {
   ratingFloor: 0,
 }
 
+const defaultArchetypes = [
+  {
+    id: 'archetype-running-qb',
+    name: 'Running QB',
+    position: 'QB',
+    notes: 'Dual-threat quarterback profile for zone-read and designed movement packages.',
+    minimums: [
+      { statKey: 'rushYards', minValue: 350 },
+      { statKey: 'passingYards', minValue: 2200 },
+    ],
+  },
+  {
+    id: 'archetype-boundary-x',
+    name: 'Boundary X',
+    position: 'WR',
+    notes: 'Outside receiver profile for vertical shots and red-zone isolation.',
+    minimums: [
+      { statKey: 'receivingYards', minValue: 900 },
+      { statKey: 'touchdowns', minValue: 10 },
+    ],
+  },
+]
+
 const rosterPositions = [...new Set(players.map((player) => player.position))].sort()
 
 function deepClone(value) {
@@ -102,6 +125,7 @@ const state = reactive({
     ...(persisted.filters || {}),
   },
   shortlists: (persisted.shortlists || deepClone(defaultShortlists)).map(normalizeShortlist),
+  archetypes: persisted.archetypes || deepClone(defaultArchetypes),
   compareSelection:
     persisted.compareSelection && persisted.compareSelection.length
       ? persisted.compareSelection
@@ -114,6 +138,7 @@ if (typeof window !== 'undefined') {
     () => ({
       filters: state.filters,
       shortlists: state.shortlists,
+      archetypes: state.archetypes,
       compareSelection: state.compareSelection,
     }),
     (value) => {
@@ -220,6 +245,33 @@ function removePositionSlot(shortlistId, slotId) {
   )
 }
 
+function createArchetype({ name, position, notes, minimums }) {
+  const normalizedMinimums = (minimums || [])
+    .filter((rule) => rule?.statKey && Number.isFinite(Number(rule.minValue)))
+    .map((rule) => ({
+      statKey: rule.statKey,
+      minValue: Number(rule.minValue),
+    }))
+
+  if (!position || !normalizedMinimums.length) {
+    return
+  }
+
+  const archetype = {
+    id: `archetype-${Date.now()}`,
+    name: name?.trim() || `${position} Archetype`,
+    position,
+    notes: notes?.trim() || '',
+    minimums: normalizedMinimums,
+  }
+
+  state.archetypes = [archetype, ...state.archetypes]
+}
+
+function deleteArchetype(archetypeId) {
+  state.archetypes = state.archetypes.filter((archetype) => archetype.id !== archetypeId)
+}
+
 const filteredPlayers = computed(() =>
   state.players.filter((player) => {
     const query = state.filters.query.trim().toLowerCase()
@@ -261,6 +313,8 @@ export function useRecruitingStore() {
     removePlayerFromShortlist,
     addPositionSlot,
     removePositionSlot,
+    createArchetype,
+    deleteArchetype,
     rosterPositions,
   }
 }

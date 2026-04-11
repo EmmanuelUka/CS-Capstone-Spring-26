@@ -1,14 +1,18 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 import DashboardView from '../views/DashboardView.vue'
+import AccountView from '../views/AccountView.vue'
 import PlayerCardView from '../views/PlayerCardView.vue'
 import PlayerComparisonView from '../views/PlayerComparisonView.vue'
 import PlayerListView from '../views/PlayerListView.vue'
+import SchemeCreatorView from '../views/SchemeCreatorView.vue'
 import ShortlistsView from '../views/ShortlistsView.vue'
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'dashboard', component: DashboardView },
+  { path: '/account', name: 'account', component: AccountView },
+  { path: '/schemes', name: 'schemes', component: SchemeCreatorView },
   { path: '/players', name: 'players', component: PlayerListView },
   {
     path: '/players/:playerId',

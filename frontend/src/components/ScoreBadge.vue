@@ -43,8 +43,8 @@ const tier = computed(() => {
   min-width: 5.2rem;
   padding: 0.8rem 0.9rem;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
 }
 
 .score-label {
@@ -52,7 +52,7 @@ const tier = computed(() => {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(242, 236, 227, 0.68);
+  color: var(--text-muted);
 }
 
 .score-value {
@@ -63,18 +63,18 @@ const tier = computed(() => {
 
 .score-tier {
   font-size: 0.72rem;
-  color: rgba(242, 236, 227, 0.6);
+  color: var(--text-subtle);
 }
 
 .tone-gold .score-value {
-  color: #ffcd7a;
+  color: var(--accent-strong);
 }
 
 .tone-mint .score-value {
-  color: #93dfb2;
+  color: var(--success);
 }
 
 .tone-blue .score-value {
-  color: #87c9ff;
+  color: var(--brand-cool);
 }
 </style>

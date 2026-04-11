@@ -54,3 +54,32 @@ export async function logoutSession(csrfToken) {
     body: JSON.stringify({}),
   })
 }
+
+export async function getManagedUsers() {
+  const payload = await request('/api/users', { method: 'GET' })
+  return payload?.users || []
+}
+
+export async function createManagedUser({ email, role }, csrfToken) {
+  return request('/api/users', {
+    method: 'POST',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+    body: JSON.stringify({ email, role }),
+  })
+}
+
+export async function updateManagedUserRole({ email, role }, csrfToken) {
+  return request('/api/users/role', {
+    method: 'PATCH',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+    body: JSON.stringify({ email, role }),
+  })
+}
+
+export async function deleteManagedUser({ email }, csrfToken) {
+  return request('/api/users', {
+    method: 'DELETE',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+    body: JSON.stringify({ email }),
+  })
+}

@@ -196,7 +196,7 @@ function addPlayerToCompare(playerId) {
 .summary-card p,
 .empty-panel p:last-child {
   margin: 0.35rem 0 0;
-  color: rgba(242, 236, 227, 0.72);
+  color: var(--text-muted);
 }
 
 .card-grid,
@@ -216,10 +216,10 @@ function addPlayerToCompare(playerId) {
 .search-field input {
   width: 100%;
   padding: 0.9rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f2ece3;
+  background: var(--bg-soft);
+  color: var(--text);
 }
 
 .selected-players {
@@ -234,17 +234,19 @@ function addPlayerToCompare(playerId) {
   border: 0;
   text-align: left;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.045);
   cursor: pointer;
 }
 
 .selected-chip {
-  outline: 1px solid rgba(255, 183, 94, 0.34);
-  background: rgba(255, 183, 94, 0.08);
+  outline: 1px solid rgba(217, 151, 0, 0.28);
+  background:
+    linear-gradient(180deg, rgba(217, 151, 0, 0.12), rgba(217, 151, 0, 0.04)),
+    rgba(255, 255, 255, 0.035);
 }
 
 .selected-chip span {
-  color: #f8f2e8;
+  color: var(--text);
 }
 
 .search-results {
@@ -256,12 +258,12 @@ function addPlayerToCompare(playerId) {
 .search-result small,
 .search-empty,
 .search-meta {
-  color: rgba(242, 236, 227, 0.54);
+  color: var(--text-subtle);
 }
 
 .search-result strong {
   font-size: 0.98rem;
-  color: #f8f2e8;
+  color: var(--text);
 }
 
 .search-empty,
@@ -283,12 +285,12 @@ function addPlayerToCompare(playerId) {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(242, 236, 227, 0.52);
+  color: var(--text-subtle);
 }
 
 .summary-card strong {
   font-size: 1.6rem;
-  color: #ffcd7a;
+  color: var(--accent-strong);
 }
 
 @media (min-width: 900px) {
