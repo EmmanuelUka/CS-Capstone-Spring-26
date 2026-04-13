@@ -1,0 +1,194 @@
+[
+  {
+    "id": 1,
+    "name": "Patrick Mahomes",
+    "photo": "https://commons.wikimedia.org/wiki/Special:FilePath/Patrick%20Mahomes%202023%20%28cropped%29.jpg",
+    "school": "Patrick Henry HS",
+    "recruitingClass": 2014,
+    "position": "QB",
+    "projectedPosition": "Dual Threat QB",
+    "ht": "6-2",
+    "wt": 230,
+    "context": {
+      "competitionLevel": "Elite",
+      "gamesPlayed": 14,
+      "role": "Starter",
+      "recruitType": "High School"
+    },
+    "evaluation": {
+      "comparisonScore": 97,
+      "schemeFitScore": 95,
+      "confidenceScore": 98,
+      "status": "Prototype franchise passer",
+      "breakdown": {
+        "physical": 25,
+        "athletic": 24,
+        "production": 35,
+        "context": 13
+      },
+      "notes": "Unmatched improvisation and elite production at every level of comparison.",
+      "aiSynopsis": "Above-average throws, mobility and leadership make this recruit the highest confidence comp in the dataset.",
+      "insufficientData": false
+    }
+  },
+  {
+    "id": 2,
+    "name": "Derrick Henry",
+    "photo": "https://commons.wikimedia.org/wiki/Special:FilePath/Derrick%20Henry.jpg",
+    "school": "Yulee HS",
+    "recruitingClass": 2013,
+    "position": "RB",
+    "projectedPosition": "Power Runner",
+    "ht": "6-3",
+    "wt": 247,
+    "context": {
+      "competitionLevel": "Elite",
+      "gamesPlayed": 13,
+      "role": "Starter",
+      "recruitType": "High School"
+    },
+    "evaluation": {
+      "comparisonScore": 96,
+      "schemeFitScore": 90,
+      "confidenceScore": 94,
+      "status": "Physical downhill force",
+      "breakdown": {
+        "physical": 25,
+        "athletic": 22,
+        "production": 35,
+        "context": 14
+      },
+      "notes": "Tremendous power translates directly to MAC-type downhill rushing comparisons.",
+      "aiSynopsis": "Elite dwell-time and contact balance, especially on early-down and short-yardage workloads.",
+      "insufficientData": false
+    }
+  },
+  {
+    "id": 3,
+    "name": "Myles Garrett",
+    "photo": "https://commons.wikimedia.org/wiki/Special:FilePath/Myles%20Garrett%20%282021%29.jpg",
+    "school": "Martin Luther King HS",
+    "recruitingClass": 2014,
+    "position": "DE",
+    "projectedPosition": "Edge Rusher",
+    "ht": "6-4",
+    "wt": 272,
+    "context": {
+      "competitionLevel": "Elite",
+      "gamesPlayed": 12,
+      "role": "Starter",
+      "recruitType": "High School"
+    },
+    "evaluation": {
+      "comparisonScore": 95,
+      "schemeFitScore": 91,
+      "confidenceScore": 92,
+      "status": "Pass-rush anchor",
+      "breakdown": {
+        "physical": 24,
+        "athletic": 24,
+        "production": 34,
+        "context": 13
+      },
+      "notes": "Wingspan, bend and burst mirror top MAC edge rushers that produced early.",
+      "aiSynopsis": "High-level counter moves and suddenness paired with overwhelming size.",
+      "insufficientData": false
+    }
+  },
+  {
+    "id": 4,
+    "name": "Lamar Jackson",
+    "photo": "https://commons.wikimedia.org/wiki/Special:FilePath/Lamar%20Jackson%202021.jpg",
+    "school": "Boyd County HS",
+    "recruitingClass": 2015,
+    "position": "QB",
+    "projectedPosition": "Dual Threat QB",
+    "ht": "6-2",
+    "wt": 216,
+    "context": {
+      "competitionLevel": "Strong",
+      "gamesPlayed": 12,
+      "role": "Starter",
+      "recruitType": "High School"
+    },
+    "evaluation": {
+      "comparisonScore": 94,
+      "schemeFitScore": 93,
+      "confidenceScore": 90,
+      "status": "High-speed playmaker",
+      "breakdown": {
+        "physical": 23,
+        "athletic": 25,
+        "production": 34,
+        "context": 12
+      },
+      "notes": "Athleticism and improvisation elevate his comparisons within the coach-defined role.",
+      "aiSynopsis": "Best fit in outside-read stretch schemes with an emphasis on rapid decision-making.",
+      "insufficientData": false
+    }
+  },
+  {
+    "id": 5,
+    "name": "Josh Allen",
+    "photo": "https://commons.wikimedia.org/wiki/Special:FilePath/Josh%20Allen%202019.jpg",
+    "school": "Firebaugh HS",
+    "recruitingClass": 2015,
+    "position": "QB",
+    "projectedPosition": "Dual Threat QB",
+    "ht": "6-5",
+    "wt": 237,
+    "context": {
+      "competitionLevel": "Strong",
+      "gamesPlayed": 13,
+      "role": "Starter",
+      "recruitType": "High School"
+    },
+    "evaluation": {
+      "comparisonScore": 92,
+      "schemeFitScore": 90,
+      "confidenceScore": 89,
+      "status": "Versatile field general",
+      "breakdown": {
+        "physical": 24,
+        "athletic": 23,
+        "production": 33,
+        "context": 12
+      },
+      "notes": "Large frame, arm strength and production make him a reliable early-round target.",
+      "aiSynopsis": "Throws fastballs to the boundary and engages in impactful secondary rushing upside.",
+      "insufficientData": false
+    }
+  },
+  {
+    "id": 6,
+    "name": "Justin Herbert",
+    "photo": "https://commons.wikimedia.org/wiki/Special:FilePath/Justin%20Herbert.jpg",
+    "school": "Oregon HS",
+    "recruitingClass": 2016,
+    "position": "QB",
+    "projectedPosition": "Pocket/Power QB",
+    "ht": "6-6",
+    "wt": 237,
+    "context": {
+      "competitionLevel": "Strong",
+      "gamesPlayed": 12,
+      "role": "Starter",
+      "recruitType": "High School"
+    },
+    "evaluation": {
+      "comparisonScore": 93,
+      "schemeFitScore": 91,
+      "confidenceScore": 91,
+      "status": "Calm successor",
+      "breakdown": {
+        "physical": 24,
+        "athletic": 22,
+        "production": 34,
+        "context": 14
+      },
+      "notes": "Poise, extension and size match the template for controlled MAC-type systems.",
+      "aiSynopsis": "High-level tape on progressive development under pro-style coaches; solid accuracy and pocket movement.",
+      "insufficientData": false
+    }
+  }
+]

@@ -1,0 +1,173 @@
+:root {
+  font-family:
+    'Sora',
+    'Avenir Next',
+    'Segoe UI',
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #f4f7ff;
+  background:
+    radial-gradient(circle at top left, rgba(217, 151, 0, 0.14), transparent 24%),
+    radial-gradient(circle at 80% 20%, rgba(79, 110, 247, 0.12), transparent 22%),
+    linear-gradient(180deg, #09111f 0%, #102445 36%, #143772 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --bg: #09111f;
+  --bg-elevated: rgba(14, 23, 38, 0.82);
+  --bg-panel: rgba(17, 28, 46, 0.84);
+  --bg-soft: rgba(255, 255, 255, 0.07);
+  --text: #f4f7ff;
+  --text-muted: rgba(244, 247, 255, 0.74);
+  --text-subtle: rgba(244, 247, 255, 0.54);
+  --line: rgba(255, 255, 255, 0.14);
+  --line-strong: rgba(217, 151, 0, 0.28);
+  --accent: #d99700;
+  --accent-strong: #efab00;
+  --accent-soft: rgba(217, 151, 0, 0.18);
+  --brand-cool: #89bee5;
+  --success: #9ad9a9;
+  --shadow-lg: 0 28px 80px rgba(0, 0, 0, 0.34);
+  --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.24);
+  --radius-xl: 32px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(217, 151, 0, 0.12), transparent 18rem),
+    radial-gradient(circle at 86% 14%, rgba(79, 110, 247, 0.12), transparent 18rem),
+    linear-gradient(180deg, #09111f 0%, #102445 36%, #143772 100%);
+  color: var(--text);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  border: 0;
+}
+
+a {
+  color: inherit;
+}
+
+#app {
+  position: relative;
+  isolation: isolate;
+}
+
+#app::before,
+#app::after {
+  content: '';
+  position: fixed;
+  inset: auto;
+  pointer-events: none;
+  z-index: -1;
+  border-radius: 999px;
+  filter: blur(12px);
+  opacity: 0.65;
+}
+
+#app::before {
+  top: 4rem;
+  left: -3rem;
+  width: 16rem;
+  height: 16rem;
+  background: radial-gradient(circle, rgba(217, 151, 0, 0.24), transparent 66%);
+}
+
+#app::after {
+  right: -4rem;
+  bottom: 3rem;
+  width: 18rem;
+  height: 18rem;
+  background: radial-gradient(circle, rgba(79, 110, 247, 0.22), transparent 66%);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.surface-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+    rgba(15, 24, 39, 0.86);
+  backdrop-filter: blur(20px);
+}
+
+.section-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.ghost-button,
+.primary-button {
+  min-height: 3rem;
+  padding: 0.8rem 1rem;
+  border-radius: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #102445;
+}
+
+.ghost-button {
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.ghost-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.empty-state {
+  padding: 1rem;
+  border-radius: 20px;
+  background: var(--bg-soft);
+}
