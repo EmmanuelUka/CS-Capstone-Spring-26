@@ -42,6 +42,7 @@ dist/
 frontend/dist/
 dist-ssr/
 frontend/dist-ssr/
+.vite
 
 *.local
 npm-debug.log*
