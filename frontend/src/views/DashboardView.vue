@@ -143,7 +143,7 @@ const shortlistSummaries = computed(() =>
 .page-copy {
   margin: 0;
   max-width: 42rem;
-  color: rgba(242, 236, 227, 0.72);
+  color: var(--text-muted);
 }
 
 .stats-grid,
@@ -156,12 +156,13 @@ const shortlistSummaries = computed(() =>
 .shortlist-card {
   padding: 0.95rem;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
 }
 
 .stat-card span,
 .shortlist-card p {
-  color: rgba(242, 236, 227, 0.6);
+  color: var(--text-muted);
 }
 
 .stat-card strong {
@@ -193,7 +194,7 @@ const shortlistSummaries = computed(() =>
 .text-link {
   padding: 0;
   background: transparent;
-  color: #ffb75e;
+  color: var(--accent);
   font-weight: 800;
 }
 
@@ -207,7 +208,8 @@ const shortlistSummaries = computed(() =>
   align-items: center;
   padding: 0.95rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
   color: inherit;
   text-align: left;
 }
@@ -215,14 +217,15 @@ const shortlistSummaries = computed(() =>
 .recruit-row span {
   font-size: 1.4rem;
   font-weight: 900;
-  color: #ffcd7a;
+  color: var(--accent-strong);
 }
 
 .activity-row {
   align-items: start;
   padding: 0.95rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .activity-dot {
@@ -230,7 +233,7 @@ const shortlistSummaries = computed(() =>
   height: 0.7rem;
   margin-top: 0.3rem;
   border-radius: 999px;
-  background: #79c8ff;
+  background: var(--brand-cool);
 }
 
 .activity-row > div:nth-child(2) {
@@ -238,7 +241,7 @@ const shortlistSummaries = computed(() =>
 }
 
 .activity-row span:last-child {
-  color: rgba(242, 236, 227, 0.5);
+  color: var(--text-subtle);
   font-size: 0.8rem;
 }
 

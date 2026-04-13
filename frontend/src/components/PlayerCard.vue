@@ -91,10 +91,10 @@ function initials(name) {
   gap: 1rem;
   padding: 1.05rem;
   border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   background:
-    radial-gradient(circle at top right, rgba(255, 183, 94, 0.16), transparent 36%),
-    linear-gradient(180deg, rgba(48, 33, 27, 0.98), rgba(27, 22, 27, 0.96));
+    radial-gradient(circle at top right, rgba(217, 151, 0, 0.18), transparent 36%),
+    linear-gradient(180deg, rgba(14, 38, 80, 0.98), rgba(8, 24, 53, 0.96));
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
 }
 
@@ -120,8 +120,8 @@ function initials(name) {
   width: 3.25rem;
   height: 3.25rem;
   border-radius: 18px;
-  background: linear-gradient(135deg, #ffb75e, #ff7d54);
-  color: #1c1511;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #102445;
   font-size: 1rem;
   font-weight: 900;
 }
@@ -139,7 +139,7 @@ function initials(name) {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(242, 236, 227, 0.52);
+  color: var(--text-subtle);
 }
 
 .card-headline h3 {
@@ -151,7 +151,7 @@ function initials(name) {
 .card-headline p,
 .hero-summary {
   margin: 0.35rem 0 0;
-  color: rgba(242, 236, 227, 0.72);
+  color: var(--text-muted);
 }
 
 .rating-block {
@@ -161,7 +161,7 @@ function initials(name) {
 
 .rating-block strong {
   font-size: 2rem;
-  color: #ffcd7a;
+  color: var(--accent-strong);
 }
 
 .card-hero {
@@ -178,14 +178,14 @@ function initials(name) {
   min-height: 7rem;
   padding: 0.8rem;
   border-radius: 24px;
-  border: 1px solid rgba(255, 224, 173, 0.16);
+  border: 1px solid var(--line-strong);
   background:
-    linear-gradient(180deg, rgba(255, 183, 94, 0.24), rgba(255, 255, 255, 0.04)),
+    linear-gradient(180deg, rgba(217, 151, 0, 0.24), rgba(255, 255, 255, 0.04)),
     rgba(255, 255, 255, 0.03);
 }
 
 .frame-stars {
-  color: #ffcd7a;
+  color: var(--accent-strong);
   font-size: 0.85rem;
   letter-spacing: 0.12em;
 }
@@ -206,7 +206,7 @@ function initials(name) {
   gap: 0.32rem;
   padding: 0.75rem 0.85rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-soft);
 }
 
 .measure-grid strong {
@@ -229,8 +229,8 @@ function initials(name) {
   border-radius: 16px;
   font-weight: 800;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.05);
-  color: #f2ece3;
+  background: var(--bg-soft);
+  color: var(--text);
 }
 
 .compact {

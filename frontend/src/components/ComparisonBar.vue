@@ -56,7 +56,7 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
   gap: 0.75rem;
   align-items: center;
   font-size: 0.85rem;
-  color: rgba(242, 236, 227, 0.7);
+  color: var(--text-muted);
 }
 
 .comparison-meta span:last-child {
@@ -68,7 +68,7 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(242, 236, 227, 0.52);
+  color: var(--text-subtle);
 }
 
 .bar-track {
@@ -85,10 +85,10 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
 
 .left-fill {
   justify-self: end;
-  background: linear-gradient(90deg, rgba(255, 183, 94, 0.45), #ffb75e);
+  background: linear-gradient(90deg, rgba(217, 151, 0, 0.45), var(--accent));
 }
 
 .right-fill {
-  background: linear-gradient(90deg, #79c8ff, rgba(121, 200, 255, 0.45));
+  background: linear-gradient(90deg, var(--brand-cool), rgba(137, 190, 229, 0.45));
 }
 </style>

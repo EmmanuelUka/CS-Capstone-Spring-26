@@ -1,4 +1,6 @@
 <script setup>
+import hashmarkLogo from '../assets/hashmark-logo.svg'
+
 defineProps({
   items: {
     type: Array,
@@ -20,10 +22,12 @@ function isActive(itemPath, currentPath) {
 <template>
   <header class="top-menu">
     <div class="brand-panel">
-      <span class="brand-badge">HM</span>
-      <div>
-        <p class="eyebrow">Hashmark Recruiting Assistant</p>
-        <h1>Coach Command Center</h1>
+      <span class="brand-badge">
+        <img :src="hashmarkLogo" alt="Hashmark logo" />
+      </span>
+      <div class="brand-copy">
+        <h1>Hashmark</h1>
+        <p class="brand-subtitle">Recruiting Assistant</p>
       </div>
     </div>
 
@@ -54,12 +58,12 @@ function isActive(itemPath, currentPath) {
   display: flex;
   gap: 0.9rem;
   align-items: center;
-  padding: 1rem;
+  padding: 1rem 0 1rem 1rem;
   border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   background:
-    radial-gradient(circle at top left, rgba(255, 183, 94, 0.14), transparent 32%),
-    rgba(23, 19, 24, 0.88);
+    radial-gradient(circle at top left, rgba(217, 151, 0, 0.14), transparent 32%),
+    rgba(10, 27, 58, 0.88);
 }
 
 .brand-badge {
@@ -68,24 +72,35 @@ function isActive(itemPath, currentPath) {
   width: 3.2rem;
   height: 3.2rem;
   border-radius: 20px;
-  background: linear-gradient(135deg, #ffb75e, #ff7d54);
-  color: #1b1512;
-  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  padding: 0.55rem;
 }
 
-.eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(242, 236, 227, 0.56);
+.brand-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0.12);
+}
+
+.brand-copy {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .brand-panel h1 {
-  margin: 0.28rem 0 0;
+  margin: 0;
   font-size: 1.45rem;
   letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.brand-subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--text-subtle);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .nav-strip {
@@ -102,8 +117,8 @@ function isActive(itemPath, currentPath) {
   min-height: 3rem;
   padding: 0.9rem 1rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(242, 236, 227, 0.74);
+  background: var(--bg-soft);
+  color: var(--text-muted);
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -115,14 +130,14 @@ function isActive(itemPath, currentPath) {
 
 .nav-link:hover {
   transform: translateY(-2px);
-  background: linear-gradient(135deg, rgba(255, 183, 94, 0.12), rgba(121, 200, 255, 0.1));
-  color: #f2ece3;
+  background: linear-gradient(135deg, rgba(217, 151, 0, 0.15), rgba(79, 110, 247, 0.14));
+  color: var(--text);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .nav-link.active {
-  background: linear-gradient(135deg, rgba(255, 183, 94, 0.2), rgba(121, 200, 255, 0.12));
-  color: #f2ece3;
+  background: linear-gradient(135deg, rgba(217, 151, 0, 0.24), rgba(79, 110, 247, 0.18));
+  color: var(--text);
 }
 
 @media (min-width: 880px) {
