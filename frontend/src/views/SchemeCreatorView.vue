@@ -3,7 +3,14 @@ import { computed, onMounted, reactive } from 'vue'
 
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
-const { state, rosterPositions, createArchetype, deleteArchetype, ensurePlayersLoaded } = useRecruitingStore()
+const {
+  state,
+  rosterPositions,
+  createArchetype,
+  deleteArchetype,
+  ensurePlayersLoaded,
+  ensureArchetypesLoaded,
+} = useRecruitingStore()
 
 const form = reactive({
   name: '',
@@ -89,8 +96,8 @@ function resetForm() {
   form.minimums = [{ statKey: '', minValue: '' }]
 }
 
-function submitArchetype() {
-  createArchetype({
+async function submitArchetype() {
+  await createArchetype({
     name: form.name,
     position: form.position,
     notes: form.notes,
@@ -110,7 +117,7 @@ const canSubmit = computed(() =>
 )
 
 onMounted(() => {
-  ensurePlayersLoaded().catch(() => {})
+  Promise.all([ensurePlayersLoaded(), ensureArchetypesLoaded()]).catch(() => {})
 })
 </script>
 

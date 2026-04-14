@@ -1443,6 +1443,29 @@ EXAMPLE_SHORTLISTS = [
     },
 ]
 
+EXAMPLE_ARCHETYPES = [
+    {
+        "id": "archetype-running-qb",
+        "name": "Running QB",
+        "position": "QB",
+        "notes": "Dual-threat quarterback profile for zone-read and designed movement packages.",
+        "minimums": [
+            {"statKey": "rushYards", "minValue": 350},
+            {"statKey": "passingYards", "minValue": 2200},
+        ],
+    },
+    {
+        "id": "archetype-boundary-x",
+        "name": "Boundary X",
+        "position": "WR",
+        "notes": "Outside receiver profile for vertical shots and red-zone isolation.",
+        "minimums": [
+            {"statKey": "receivingYards", "minValue": 900},
+            {"statKey": "touchdowns", "minValue": 10},
+        ],
+    },
+]
+
 EXAMPLE_ACTIVITY_FEED = [
     {
         "id": "act-1",
@@ -1748,6 +1771,94 @@ def get_top_3_most_recent_recruits():
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_recent_shortlists():
     return jsonify(_build_example_recruiting_payload()["shortlists"])
+
+@app.route("/api/shortlists")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_shortlists():
+    return jsonify(EXAMPLE_SHORTLISTS)
+
+@app.route("/api/shortlists", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def create_shortlist():
+    data = request.get_json() or {}
+    print("create_shortlist payload:", data)
+    return jsonify({
+        "status": "ok",
+        "shortlist": {
+            "id": data.get("id") or f"shortlist-{uuid.uuid4().hex[:8]}",
+            "name": data.get("name") or "Untitled Group",
+            "color": data.get("color") or "#ffb75e",
+            "slots": data.get("slots") or [],
+        },
+    })
+
+@app.route("/api/shortlists/<shortlist_id>", methods=["DELETE"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def delete_shortlist(shortlist_id):
+    print("delete_shortlist payload:", {"shortlistId": shortlist_id})
+    return jsonify({"status": "ok", "shortlistId": shortlist_id})
+
+@app.route("/api/shortlists/<shortlist_id>/assign_player", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def assign_shortlist_player(shortlist_id):
+    data = request.get_json() or {}
+    print("assign_shortlist_player payload:", {"shortlistId": shortlist_id, **data})
+    return jsonify({"status": "ok", "shortlistId": shortlist_id, "assignment": data})
+
+@app.route("/api/shortlists/<shortlist_id>/clear_player", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def clear_shortlist_player(shortlist_id):
+    data = request.get_json() or {}
+    print("clear_shortlist_player payload:", {"shortlistId": shortlist_id, **data})
+    return jsonify({"status": "ok", "shortlistId": shortlist_id, "cleared": data})
+
+@app.route("/api/shortlists/<shortlist_id>/slots", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def add_shortlist_slot(shortlist_id):
+    data = request.get_json() or {}
+    print("add_shortlist_slot payload:", {"shortlistId": shortlist_id, **data})
+    return jsonify({
+        "status": "ok",
+        "shortlistId": shortlist_id,
+        "slot": {
+            "id": data.get("id") or f"slot-{uuid.uuid4().hex[:8]}",
+            "position": data.get("position"),
+            "playerId": data.get("playerId"),
+        },
+    })
+
+@app.route("/api/shortlists/<shortlist_id>/slots/<slot_id>", methods=["DELETE"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def remove_shortlist_slot(shortlist_id, slot_id):
+    print("remove_shortlist_slot payload:", {"shortlistId": shortlist_id, "slotId": slot_id})
+    return jsonify({"status": "ok", "shortlistId": shortlist_id, "slotId": slot_id})
+
+@app.route("/api/archetypes")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_archetypes():
+    return jsonify(EXAMPLE_ARCHETYPES)
+
+@app.route("/api/archetypes", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def create_archetype():
+    data = request.get_json() or {}
+    print("create_archetype payload:", data)
+    return jsonify({
+        "status": "ok",
+        "archetype": {
+            "id": data.get("id") or f"archetype-{uuid.uuid4().hex[:8]}",
+            "name": data.get("name") or "Untitled Archetype",
+            "position": data.get("position"),
+            "notes": data.get("notes") or "",
+            "minimums": data.get("minimums") or [],
+        },
+    })
+
+@app.route("/api/archetypes/<archetype_id>", methods=["DELETE"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def delete_archetype(archetype_id):
+    print("delete_archetype payload:", {"archetypeId": archetype_id})
+    return jsonify({"status": "ok", "archetypeId": archetype_id})
 
 @app.route("/api/create_player", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
