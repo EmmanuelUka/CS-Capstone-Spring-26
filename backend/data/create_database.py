@@ -224,6 +224,7 @@ def load_csv(path: str = "mac_players_dataframe.csv"):
 if __name__ == '__main__':
     hdb.init_db()
     load_csv("mac_players_dataframe.csv")
-
-    import hashmark_tests
-    hashmark_tests.print_db_state(str(hdb.get_db_path()))
+    
+    # no need to print  
+    # import hashmark_tests
+    # hashmark_tests.print_db_state(str(hdb.get_db_path()))
