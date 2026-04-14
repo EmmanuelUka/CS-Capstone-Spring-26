@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import SearchableDropdown from '../components/SearchableDropdown.vue'
 import { getPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
@@ -25,6 +26,14 @@ const form = ref({
 const newSlotPosition = ref(rosterPositions[0] || '')
 const listSlotSelection = ref(rosterPositions[0] || '')
 
+const positionOptions = computed(() =>
+  rosterPositions.map((position) => ({
+    value: position,
+    label: position,
+    description: 'Position slot',
+  }))
+)
+
 const groups = computed(() =>
   state.shortlists.map((list) => ({
     ...list,
@@ -32,7 +41,13 @@ const groups = computed(() =>
     slots: list.slots.map((slot) => ({
       ...slot,
       player: slot.playerId ? getPlayerById(slot.playerId) : null,
-      options: state.players.filter((candidate) => candidate.position === slot.position),
+      options: state.players
+        .filter((candidate) => candidate.position === slot.position)
+        .map((candidate) => ({
+          value: candidate.id,
+          label: candidate.name,
+          description: `${candidate.school} - Rating ${candidate.rating}`,
+        })),
     })),
   }))
 )
@@ -91,9 +106,13 @@ function addSlotToList(shortlistId) {
       <div class="position-picker">
         <p class="picker-label">Build the slot list coaches want to fill</p>
         <div class="slot-builder">
-          <select v-model="listSlotSelection">
-            <option v-for="position in rosterPositions" :key="position" :value="position">{{ position }}</option>
-          </select>
+          <SearchableDropdown
+            v-model="listSlotSelection"
+            :options="positionOptions"
+            placeholder="Choose a position"
+            search-placeholder="Search positions"
+            empty-label="No positions matched."
+          />
           <button class="ghost-button" type="button" @click="addDraftSlot">Add slot</button>
         </div>
         <div v-if="form.positions.length" class="draft-slot-list">
@@ -123,11 +142,13 @@ function addSlotToList(shortlistId) {
         </div>
 
         <div class="slot-builder">
-          <select v-model="newSlotPosition">
-            <option v-for="position in rosterPositions" :key="`${group.id}-${position}`" :value="position">
-              {{ position }}
-            </option>
-          </select>
+          <SearchableDropdown
+            v-model="newSlotPosition"
+            :options="positionOptions"
+            placeholder="Choose a position"
+            search-placeholder="Search positions"
+            empty-label="No positions matched."
+          />
           <button class="ghost-button" type="button" @click="addSlotToList(group.id)">Add slot</button>
         </div>
 
@@ -143,28 +164,21 @@ function addSlotToList(shortlistId) {
               </div>
             </div>
 
-            <select
-              :value="slot.playerId || ''"
-              @change="addPlayerToShortlist(group.id, slot.position, $event.target.value || null)"
-            >
-              <option value="">{{ slot.player ? 'Change player' : `Assign ${slot.position}` }}</option>
-              <option v-for="player in slot.options" :key="player.id" :value="player.id">
-                {{ player.name }} • {{ player.school }}
-              </option>
-            </select>
-
-            <div v-if="slot.player" class="saved-player">
-              <button class="player-link" type="button" @click="router.push(`/players/${slot.player.id}`)">
-                <strong>{{ slot.player.name }}</strong>
-                <p>{{ slot.player.projectedPosition }} • {{ slot.player.school }}</p>
-              </button>
-
-              <button class="ghost-button" type="button" @click="removePlayerFromShortlist(group.id, slot.id)">
-                Clear
-              </button>
-            </div>
-
-            <p v-else class="slot-empty">No player assigned to this position yet.</p>
+            <SearchableDropdown
+              :model-value="slot.playerId"
+              :options="[
+                {
+                  value: null,
+                  label: slot.player ? `Clear ${slot.player.name}` : `Assign ${slot.position}`,
+                  description: slot.player ? 'Remove current assignment' : 'No player assigned yet',
+                },
+                ...slot.options,
+              ]"
+              :placeholder="slot.player ? slot.player.name : `Assign ${slot.position}`"
+              search-placeholder="Search players"
+              empty-label="No players matched."
+              @update:model-value="addPlayerToShortlist(group.id, slot.position, $event)"
+            />
           </div>
         </div>
       </section>
@@ -184,6 +198,17 @@ function addSlotToList(shortlistId) {
   gap: 1rem;
 }
 
+.group-panel,
+.position-card {
+  position: relative;
+  z-index: 0;
+}
+
+.group-panel:has(.searchable-dropdown.open),
+.position-card:has(.searchable-dropdown.open) {
+  z-index: 90;
+}
+
 .hero-panel h2,
 .group-header h3 {
   margin: 0.3rem 0 0;
@@ -191,9 +216,7 @@ function addSlotToList(shortlistId) {
 
 .hero-panel p:last-child,
 .group-header p,
-.saved-player p,
 .empty-state p,
-.slot-empty,
 .picker-label {
   margin: 0.35rem 0 0;
   color: rgba(242, 236, 227, 0.72);
@@ -201,7 +224,6 @@ function addSlotToList(shortlistId) {
 
 .panel-header,
 .group-header,
-.saved-player,
 .position-card-head {
   display: flex;
   justify-content: space-between;
@@ -221,9 +243,7 @@ function addSlotToList(shortlistId) {
   gap: 0.75rem;
 }
 
-.create-grid input,
-.position-card select,
-.slot-builder select {
+.create-grid input {
   min-height: 3rem;
   padding: 0.85rem 1rem;
   border-radius: 16px;
@@ -243,6 +263,22 @@ function addSlotToList(shortlistId) {
 .slot-builder {
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
+}
+
+.slot-builder :deep(.searchable-dropdown),
+.position-card :deep(.searchable-dropdown) {
+  min-width: 0;
+}
+
+.slot-builder :deep(.dropdown-trigger),
+.position-card :deep(.dropdown-trigger) {
+  min-height: 3rem;
+}
+
+.slot-builder :deep(.dropdown-panel),
+.position-card :deep(.dropdown-panel) {
+  min-width: 100%;
 }
 
 .draft-slot-list {
@@ -284,22 +320,6 @@ function addSlotToList(shortlistId) {
   height: 0.45rem;
   border-radius: 999px;
   margin-bottom: 0.75rem;
-}
-
-.saved-player {
-  margin-top: 0.85rem;
-  padding: 0.95rem;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.04);
-  align-items: start;
-}
-
-.player-link {
-  flex: 1;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
 .position-card {

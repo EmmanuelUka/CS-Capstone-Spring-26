@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import ComparisonBar from '../components/ComparisonBar.vue'
 import PlayerCard from '../components/PlayerCard.vue'
 import { useRecruitingStore } from '../store/useRecruitingStore'
+import { playerIdListIncludes } from '../utils/playerIds'
 
 const router = useRouter()
 const { state, comparePlayers, toggleComparePlayer } = useRecruitingStore()
@@ -21,7 +22,7 @@ const hasEnoughPlayers = computed(() => comparePlayers.value.length >= 2)
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
 const visibleSearchResults = computed(() => {
   const matches = state.players.filter((player) => {
-    if (state.compareSelection.includes(player.id)) {
+    if (playerIdListIncludes(state.compareSelection, player.id)) {
       return false
     }
 
@@ -43,7 +44,7 @@ const hiddenSearchCount = computed(() => {
   }
 
   const totalMatches = state.players.filter((player) => {
-    if (state.compareSelection.includes(player.id)) {
+    if (playerIdListIncludes(state.compareSelection, player.id)) {
       return false
     }
 
@@ -61,7 +62,7 @@ function openPlayer(playerId) {
 }
 
 function comparePlayer(playerId) {
-  if (!state.compareSelection.includes(playerId) || state.compareSelection.length > 2) {
+  if (!playerIdListIncludes(state.compareSelection, playerId) || state.compareSelection.length > 2) {
     toggleComparePlayer(playerId)
   }
 }
@@ -147,14 +148,13 @@ function addPlayerToCompare(playerId) {
 
       <div v-for="[label, key] in categories" :key="key" class="category-block">
         <div class="category-heading">
-          <strong>{{ label }}</strong>
+          <span class="category-label">{{ label }}</span>
         </div>
 
         <div class="category-bars">
           <ComparisonBar
             v-for="player in comparePlayers"
             :key="`${player.id}-${key}`"
-            :label="label"
             :left-value="player.breakdown[key]"
             :right-value="100 - player.breakdown[key]"
             :left-label="player.name.split(' ')[0]"
@@ -273,11 +273,25 @@ function addPlayerToCompare(playerId) {
 
 .category-block {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.45rem;
 }
 
-.category-heading strong {
-  font-size: 1rem;
+.category-heading {
+  display: flex;
+  justify-content: center;
+}
+
+.category-label {
+  display: block;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  text-align: center;
 }
 
 .summary-card span {

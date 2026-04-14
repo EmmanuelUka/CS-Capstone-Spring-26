@@ -1,6 +1,8 @@
+import { playerIdsMatch } from '../utils/playerIds'
+
 export const players = [
   {
-    id: 'evan-brooks',
+    id: 1,
     name: 'Evan Brooks',
     school: 'St. Xavier',
     state: 'OH',
@@ -38,10 +40,10 @@ export const players = [
       interceptions: 6,
       rushYards: 512,
     },
-    topComparables: ['tyler-morris', 'caden-price', 'miles-turner'],
+    topComparables: [4, 6, 7],
   },
   {
-    id: 'malik-dorsey',
+    id: 2,
     name: 'Malik Dorsey',
     school: 'Buford',
     state: 'GA',
@@ -79,10 +81,10 @@ export const players = [
       touchdowns: 16,
       contestedCatchRate: '68%',
     },
-    topComparables: ['jalen-strickland', 'caden-price', 'tyler-morris'],
+    topComparables: [5, 6, 4],
   },
   {
-    id: 'isaiah-ford',
+    id: 3,
     name: 'Isaiah Ford',
     school: 'IMG Academy',
     state: 'FL',
@@ -120,10 +122,10 @@ export const players = [
       sacks: 6,
       forcedFumbles: 3,
     },
-    topComparables: ['miles-turner', 'jalen-strickland', 'evan-brooks'],
+    topComparables: [7, 5, 1],
   },
   {
-    id: 'tyler-morris',
+    id: 4,
     name: 'Tyler Morris',
     school: 'North Shore',
     state: 'TX',
@@ -161,10 +163,10 @@ export const players = [
       interceptions: 8,
       completionRate: '68%',
     },
-    topComparables: ['evan-brooks', 'caden-price', 'miles-turner'],
+    topComparables: [1, 6, 7],
   },
   {
-    id: 'jalen-strickland',
+    id: 5,
     name: 'Jalen Strickland',
     school: 'Cass Tech',
     state: 'MI',
@@ -202,10 +204,10 @@ export const players = [
       tackles: 39,
       completionAllowed: '38%',
     },
-    topComparables: ['malik-dorsey', 'isaiah-ford', 'miles-turner'],
+    topComparables: [2, 3, 7],
   },
   {
-    id: 'caden-price',
+    id: 6,
     name: 'Caden Price',
     school: 'Bishop Gorman',
     state: 'NV',
@@ -243,10 +245,10 @@ export const players = [
       touchdowns: 11,
       yardsAfterCatch: 241,
     },
-    topComparables: ['malik-dorsey', 'tyler-morris', 'evan-brooks'],
+    topComparables: [2, 4, 1],
   },
   {
-    id: 'miles-turner',
+    id: 7,
     name: 'Miles Turner',
     school: 'St. Frances Academy',
     state: 'MD',
@@ -284,7 +286,7 @@ export const players = [
       tacklesForLoss: 15,
       qbHits: 19,
     },
-    topComparables: ['isaiah-ford', 'jalen-strickland', 'malik-dorsey'],
+    topComparables: [3, 5, 2],
   },
 ]
 
@@ -294,9 +296,9 @@ export const shortlists = [
     name: 'Priority Board',
     color: '#ffb75e',
     slots: [
-      { position: 'QB', playerId: 'evan-brooks' },
-      { position: 'WR', playerId: 'malik-dorsey' },
-      { position: 'CB', playerId: 'jalen-strickland' },
+      { position: 'QB', playerId: 1 },
+      { position: 'WR', playerId: 2 },
+      { position: 'CB', playerId: 5 },
     ],
   },
   {
@@ -304,9 +306,9 @@ export const shortlists = [
     name: 'Midwest Targets',
     color: '#79c8ff',
     slots: [
-      { position: 'QB', playerId: 'evan-brooks' },
-      { position: 'LB', playerId: 'isaiah-ford' },
-      { position: 'CB', playerId: 'jalen-strickland' },
+      { position: 'QB', playerId: 1 },
+      { position: 'LB', playerId: 3 },
+      { position: 'CB', playerId: 5 },
     ],
   },
   {
@@ -314,8 +316,8 @@ export const shortlists = [
     name: 'Late Cycle Values',
     color: '#8dd8a7',
     slots: [
-      { position: 'QB', playerId: 'tyler-morris' },
-      { position: 'EDGE', playerId: 'miles-turner' },
+      { position: 'QB', playerId: 4 },
+      { position: 'EDGE', playerId: 7 },
     ],
   },
 ]
@@ -348,7 +350,7 @@ export const activityFeed = [
 ]
 
 export function getPlayerById(playerId) {
-  return players.find((player) => player.id === playerId) || null
+  return players.find((player) => playerIdsMatch(player.id, playerId)) || null
 }
 
 export function getPlayersByIds(ids = []) {

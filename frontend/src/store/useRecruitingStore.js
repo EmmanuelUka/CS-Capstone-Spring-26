@@ -5,6 +5,7 @@ import {
   players,
   shortlists as defaultShortlists,
 } from '../data/mockRecruitingData'
+import { normalizePlayerId, playerIdListIncludes, playerIdsMatch } from '../utils/playerIds'
 
 const STORAGE_KEY = 'hashmark-recruiting-prototype'
 
@@ -129,7 +130,7 @@ const state = reactive({
   compareSelection:
     persisted.compareSelection && persisted.compareSelection.length
       ? persisted.compareSelection
-      : ['evan-brooks', 'malik-dorsey'],
+      : [1, 2],
   ready: true,
 })
 
@@ -160,17 +161,21 @@ function resetFilters() {
 }
 
 function setCompareSelection(ids) {
-  const uniqueIds = [...new Set(ids.filter((id) => getPlayerById(id)))]
+  const uniqueIds = [...new Set(ids.map(normalizePlayerId).filter((id) => getPlayerById(id)))]
   state.compareSelection = uniqueIds
 }
 
 function toggleComparePlayer(playerId) {
-  if (state.compareSelection.includes(playerId)) {
-    state.compareSelection = state.compareSelection.filter((id) => id !== playerId)
+  const normalizedPlayerId = normalizePlayerId(playerId)
+
+  if (playerIdListIncludes(state.compareSelection, normalizedPlayerId)) {
+    state.compareSelection = state.compareSelection.filter(
+      (id) => !playerIdsMatch(id, normalizedPlayerId)
+    )
     return
   }
 
-  state.compareSelection = [...state.compareSelection, playerId]
+  state.compareSelection = [...state.compareSelection, normalizedPlayerId]
 }
 
 function createShortlist({ name, color, positions }) {

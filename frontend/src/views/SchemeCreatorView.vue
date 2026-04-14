@@ -277,6 +277,27 @@ const canSubmit = computed(() =>
   color: var(--text);
 }
 
+.field-group select,
+.rule-row select {
+  appearance: none;
+  color-scheme: dark;
+  background:
+    linear-gradient(180deg, rgba(217, 151, 0, 0.08), rgba(255, 255, 255, 0.02)),
+    var(--bg-soft);
+}
+
+.field-group select:focus,
+.rule-row select:focus {
+  outline: 1px solid rgba(217, 151, 0, 0.42);
+  border-color: rgba(217, 151, 0, 0.42);
+}
+
+.field-group select option,
+.rule-row select option {
+  background: #102445;
+  color: #f4f7ff;
+}
+
 .field-group textarea {
   min-height: 6rem;
   resize: vertical;

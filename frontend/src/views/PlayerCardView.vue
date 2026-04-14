@@ -7,6 +7,7 @@ import ComparisonBar from '../components/ComparisonBar.vue'
 import ScoreBadge from '../components/ScoreBadge.vue'
 import { getComparables, getPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
+import { playerIdsMatch } from '../utils/playerIds'
 
 const props = defineProps({
   playerId: {
@@ -20,7 +21,9 @@ const { state, toggleComparePlayer } = useRecruitingStore()
 
 const player = computed(() => getPlayerById(props.playerId))
 const comparables = computed(() => (player.value ? getComparables(player.value) : []))
-const playerIndex = computed(() => state.players.findIndex((entry) => entry.id === props.playerId))
+const playerIndex = computed(() =>
+  state.players.findIndex((entry) => playerIdsMatch(entry.id, props.playerId))
+)
 const previousPlayerId = computed(() =>
   playerIndex.value > 0 ? state.players[playerIndex.value - 1].id : null
 )

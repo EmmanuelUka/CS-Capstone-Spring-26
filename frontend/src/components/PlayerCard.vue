@@ -21,6 +21,88 @@ function initials(name) {
     .map((part) => part[0])
     .join('')
 }
+
+function formatStatLabel(label) {
+  return label
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .trim()
+}
+
+function getStatEntries(player) {
+  return Object.entries(player?.stats || {})
+}
+
+function parseComparableStatValue(value) {
+  if (typeof value === 'number') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const normalized = Number.parseFloat(value.replace('%', '').trim())
+    return Number.isFinite(normalized) ? normalized : null
+  }
+
+  return null
+}
+
+function getBestStatEntry(player) {
+  let bestEntry = null
+
+  for (const [key, value] of getStatEntries(player)) {
+    const comparableValue = parseComparableStatValue(value)
+
+    if (comparableValue === null) {
+      continue
+    }
+
+    if (!bestEntry || comparableValue > bestEntry.rankValue) {
+      bestEntry = {
+        label: formatStatLabel(key),
+        value,
+        rankValue: comparableValue,
+      }
+    }
+  }
+
+  return bestEntry
+}
+
+function getSummaryEntries(player, compact) {
+  if (!compact) {
+    return getStatEntries(player).map(([key, value]) => ({
+      key,
+      label: formatStatLabel(key),
+      value,
+    }))
+  }
+
+  const bestStat = getBestStatEntry(player)
+  const entries = [
+    {
+      key: 'height',
+      label: 'Height',
+      value: player?.height || 'N/A',
+    },
+    {
+      key: 'weight',
+      label: 'Weight',
+      value: player?.weight ? `${player.weight} lbs` : 'N/A',
+    },
+    {
+      key: bestStat?.label || 'best-stat',
+      label: bestStat?.label || 'Best Stat',
+      value: bestStat?.value ?? 'N/A',
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      value: player?.evaluationStatus || 'N/A',
+    },
+  ]
+
+  return entries
+}
 </script>
 
 <template>
@@ -50,21 +132,13 @@ function initials(name) {
     </div>
 
     <div class="measure-grid">
-      <div>
-        <span>Height</span>
-        <strong>{{ player.height }}</strong>
+      <div v-for="entry in getSummaryEntries(player, compact)" :key="entry.key">
+        <span>{{ entry.label }}</span>
+        <strong>{{ entry.value }}</strong>
       </div>
-      <div>
-        <span>Weight</span>
-        <strong>{{ player.weight }} lbs</strong>
-      </div>
-      <div>
-        <span>40 Time</span>
-        <strong>{{ player.fortyTime }}</strong>
-      </div>
-      <div>
-        <span>Status</span>
-        <strong>{{ player.evaluationStatus }}</strong>
+      <div v-if="!getSummaryEntries(player, compact).length" class="empty-stat">
+        <span>Stats</span>
+        <strong>No stats available</strong>
       </div>
     </div>
 
@@ -211,6 +285,10 @@ function initials(name) {
 
 .measure-grid strong {
   font-size: 1rem;
+}
+
+.empty-stat {
+  grid-column: 1 / -1;
 }
 
 .score-row {
