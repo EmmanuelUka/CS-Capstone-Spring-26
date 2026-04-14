@@ -27,6 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "data"))
 
 import eval_utility_flask as eval_api
 import hashmark_db as recruiting_db
+import playerEval as pe
+import player_metrics
 from db import (
     attach_subject_to_user,
     delete_user,
@@ -1681,6 +1683,21 @@ _RECRUIT_TYPE_DB_VALUES = {
     "transfer": "transfer",
 }
 _DEFAULT_SHORTLIST_COLOR = "#ffb75e"
+_STATE_CODE_TO_NAME = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+}
 
 
 def _coerce_int(value):
@@ -1737,6 +1754,8 @@ def _score_to_percent(value):
         numeric = float(value)
     except (TypeError, ValueError):
         return 0
+    if numeric != numeric:
+        return 0
     if numeric <= 1:
         numeric *= 100
     return round(numeric)
@@ -1750,6 +1769,29 @@ def _player_type_label(recruit_type, is_historical=False):
 
 def _player_type_db_value(player_type):
     return _RECRUIT_TYPE_DB_VALUES.get((player_type or "").strip().lower())
+
+
+def _state_name_from_code(state_code):
+    return _STATE_CODE_TO_NAME.get((state_code or "").strip().upper(), state_code)
+
+
+def _transfer_playing_time_key(frequency_player, conference):
+    frequency = (frequency_player or "").strip().lower()
+    conference_name = (conference or "").strip()
+    power_conferences = {"SEC", "Big Ten", "Big 12", "ACC"}
+    group_of_five = {"AAC", "Mountain West", "Sun Belt", "MAC", "CUSA"}
+
+    if frequency == "starter":
+        if conference_name in power_conferences:
+            return "starter_p5"
+        if conference_name in group_of_five:
+            return "starter_g5"
+        return "starter_fcs"
+    if frequency == "backup":
+        if conference_name in power_conferences:
+            return "backup_p5"
+        return "backup_g5"
+    return "starter_d2"
 
 
 def _query_players(is_recruit, args=None, order_by="p.name ASC", limit=None):
@@ -2021,46 +2063,212 @@ def _load_archetypes():
     return archetypes
 
 
-def _load_historical_matches(player_id):
-    recruit = _get_db_player(player_id)
-    if not recruit or not recruit.get("is_recruit"):
-        return []
-
-    historical_records = _query_players(
-        False,
-        args={"position": recruit.get("position") or "All"},
-        order_by="p.play_year DESC, p.name ASC",
-        limit=8,
+def _get_player_row(player_id):
+    records = _df_records(
+        recruiting_db.custom_query_df(
+            """
+            SELECT
+                p.id,
+                p.name,
+                p.team_name,
+                p.is_recruit,
+                p.evaluation_id,
+                pos.name AS position,
+                p.height,
+                p.weight,
+                p.school_name,
+                p.state_code,
+                p.recruit_type,
+                p.school_strength,
+                p.transfer_conference,
+                p.play_year,
+                p.frequency_player,
+                p.notes
+            FROM players p
+            LEFT JOIN positions pos ON pos.id = p.position_id
+            WHERE p.id = ?
+            LIMIT 1
+            """,
+            (player_id,),
+        )
     )
-    metric_map = _build_player_metric_map([record["id"] for record in historical_records])
-    matches = []
-    for record in historical_records:
-        metrics = metric_map.get(record["id"], {})
+    return records[0] if records else None
+
+
+def _get_player_stats(player_id):
+    return _build_player_stats_map([player_id]).get(player_id, {})
+
+
+def _build_eval_recruit_dict(player_record, stats_map):
+    recruit_type = "transfer" if player_record.get("recruit_type") == "transfer" else "highschool"
+    return {
+        "name": player_record.get("name") or "",
+        "position": player_record.get("position") or "",
+        "season": player_record.get("play_year") or 2024,
+        "recruit_type": recruit_type,
+        "home_state": _state_name_from_code(player_record.get("state_code")),
+        "hs_school_strength": player_record.get("school_strength") or "average",
+        "transfer_conference": player_record.get("transfer_conference"),
+        "transfer_playing_time": _transfer_playing_time_key(
+            player_record.get("frequency_player"),
+            player_record.get("transfer_conference"),
+        ),
+        "height": player_record.get("height"),
+        "weight": player_record.get("weight"),
+        "stats": stats_map,
+    }
+
+
+def _build_historical_career_profiles():
+    rows = _df_records(
+        recruiting_db.custom_query_df(
+            """
+            SELECT
+                p.id AS player_id,
+                p.name AS player,
+                pos.name AS position,
+                COALESCE(p.play_year, 2024) AS season,
+                p.height AS bio_height,
+                p.weight AS bio_weight,
+                p.transfer_conference AS conference,
+                p.state_code AS bio_homeState,
+                s.name AS stat_name,
+                ps.value AS stat_value
+            FROM players p
+            LEFT JOIN positions pos ON pos.id = p.position_id
+            LEFT JOIN player_stats ps ON ps.player_id = p.id
+            LEFT JOIN stats s ON s.id = ps.stat_id
+            WHERE p.is_recruit = 0
+            ORDER BY p.id
+            """
+        )
+    )
+
+    merged_rows = {}
+    for row in rows:
+        player_id = str(row["player_id"])
+        if player_id not in merged_rows:
+            merged_rows[player_id] = {
+                "player_id": player_id,
+                "player": row.get("player"),
+                "position": row.get("position"),
+                "season": row.get("season"),
+                "bio_height": row.get("bio_height"),
+                "bio_weight": row.get("bio_weight"),
+                "conference": row.get("conference"),
+                "bio_homeState": _state_name_from_code(row.get("bio_homeState")),
+            }
+        if row.get("stat_name"):
+            merged_rows[player_id][row["stat_name"]] = row.get("stat_value")
+
+    return pe.build_career_profiles(list(merged_rows.values()))
+
+
+def _store_player_evaluation(player_id):
+    player_record = _get_player_row(player_id)
+    if not player_record or not player_record.get("is_recruit"):
+        return None
+
+    stats_map = _get_player_stats(player_id)
+    recruit_dict = _build_eval_recruit_dict(player_record, stats_map)
+    evaluation_result = pe.evaluate(
+        pe.Recruit(**recruit_dict),
+        _build_historical_career_profiles(),
+        top_n=3,
+    )
+    recruit_scores = player_metrics.player_score(
+        position=recruit_dict["position"],
+        recruit_type=recruit_dict["recruit_type"],
+        height=recruit_dict["height"],
+        weight=recruit_dict["weight"],
+        stats=recruit_dict["stats"],
+        home_state=recruit_dict["home_state"],
+        hs_school_strength=recruit_dict["hs_school_strength"],
+        transfer_conference=recruit_dict["transfer_conference"],
+        transfer_playing_time=recruit_dict["transfer_playing_time"],
+    )
+
+    evaluation_id = player_record.get("evaluation_id")
+    eval_kwargs = {
+        "height": recruit_dict["height"],
+        "weight": recruit_dict["weight"],
+        "context_multiplier": evaluation_result.recruit_profile.context_multiplier,
+        "confidence": evaluation_result.recruit_profile.confidence * 100,
+        "physical_score": recruit_scores["physical"]["score"],
+        "production_score": recruit_scores["production"]["score"],
+        "context_score": recruit_scores["context"]["score"],
+    }
+    if evaluation_id:
+        recruiting_db.update_player_evaluation(evaluation_id, **eval_kwargs)
+    else:
+        evaluation_id = recruiting_db.insert_player_evaluation(player_id, **eval_kwargs)
+
+    top_match = evaluation_result.top_matches[0] if evaluation_result.top_matches else None
+    if top_match:
+        recruiting_db.insert_player_comparison(
+            evaluation_id=evaluation_id,
+            final_score=top_match.final_score,
+            confidence=top_match.confidence * 100,
+            recency_weight=top_match.recency_weight,
+            physical_score=top_match.physical.score,
+            physical_height=top_match.physical.height_sim,
+            physical_weight=top_match.physical.weight_sim,
+            production_score=top_match.production.score,
+            production_stats_used=top_match.production.fields_used,
+            production_stats_missing=top_match.production.fields_missing,
+            context_score=top_match.context.score,
+            context_recruit=top_match.context.recruit_multiplier,
+            context_comp=top_match.context.comparable_multiplier,
+        )
+
+    return evaluation_result
+
+
+def _evaluation_matches_to_payload(evaluation_result):
+    payload = []
+    for match in evaluation_result.top_matches:
         comparison_scores = {
-            "physical": _score_to_percent(
-                metrics.get("comp_physical_score") or metrics.get("eval_physical_score")
-            ),
-            "production": _score_to_percent(
-                metrics.get("comp_production_score") or metrics.get("eval_production_score")
-            ),
-            "context": _score_to_percent(
-                metrics.get("comp_context_score") or metrics.get("eval_context_score")
-            ),
+            "physical": _score_to_percent(match.physical.score),
+            "production": _score_to_percent(match.production.score),
+            "context": _score_to_percent(match.context.score),
         }
-        matches.append(
+        payload.append(
             {
-                "historicalId": record["id"],
-                "name": record.get("name") or "",
-                "position": record.get("position") or "",
-                "school": record.get("school_name") or record.get("team_name") or "",
-                "conference": record.get("transfer_conference") or record.get("team_name") or "",
-                "lastSeason": record.get("play_year"),
+                "historicalId": _coerce_int(match.player_id) or match.player_id,
+                "name": match.name,
+                "position": evaluation_result.position,
+                "school": "",
+                "conference": "",
+                "lastSeason": None,
                 "comparisonScores": comparison_scores,
                 "superScore": _average_score(comparison_scores.values()),
             }
         )
-    matches.sort(key=lambda match: match["superScore"], reverse=True)
-    return matches
+
+    if not payload:
+        return payload
+
+    historical_rows = {
+        str(row["id"]): row
+        for row in _query_players(False, args={"position": evaluation_result.position}, order_by="p.play_year DESC, p.name ASC")
+    }
+    for item in payload:
+        row = historical_rows.get(str(item["historicalId"]))
+        if row:
+            item["school"] = row.get("school_name") or row.get("team_name") or ""
+            item["conference"] = row.get("transfer_conference") or row.get("team_name") or ""
+            item["lastSeason"] = row.get("play_year")
+    return payload
+
+
+def _load_historical_matches(player_id):
+    recruit = _get_player_row(player_id)
+    if not recruit or not recruit.get("is_recruit"):
+        return []
+    evaluation_result = _store_player_evaluation(player_id)
+    if not evaluation_result:
+        return []
+    return _evaluation_matches_to_payload(evaluation_result)
 
 
 @app.route("/api/example_recruiting_data")
@@ -2358,6 +2566,7 @@ def create_player():
             stat_id = recruiting_db.insert_stat(stat_name, position_id)
         recruiting_db.insert_player_stat(player_id, stat_id, float(stat_value))
 
+    _store_player_evaluation(player_id)
     created_player = _get_example_player(player_id)
     return jsonify({"status": "ok", "player": created_player or {"id": player_id}})
 

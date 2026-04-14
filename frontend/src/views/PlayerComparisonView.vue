@@ -100,9 +100,9 @@ function clearRecruitSelection() {
     <section class="compare-header surface-panel">
       <div>
         <p class="eyebrow section-label">Comparison Page</p>
-        <h2>Open a recruit and inspect their closest historical matches.</h2>
+        <h2>Open a recruit and inspect their 3 closest database matches.</h2>
         <p>
-          Select one recruit to see the ranked historical player list. SuperScore is the average of the historical
+          Select one recruit to see the ranked top-3 similar players from the database. SuperScore is the average of the
           comparison scores shown on the bars below.
         </p>
       </div>
@@ -157,7 +157,7 @@ function clearRecruitSelection() {
 
     <section v-if="activeRecruit && historicalMatches.length" class="compare-panel surface-panel">
       <div class="section-head">
-        <p class="eyebrow section-label">Historical Matches</p>
+        <p class="eyebrow section-label">Top Matches</p>
         <h3>{{ activeRecruit.name }} ranked by SuperScore</h3>
       </div>
 
@@ -171,7 +171,7 @@ function clearRecruitSelection() {
         >
           <div class="historical-head">
             <div>
-              <span class="match-rank">#{{ index + 1 }} Historical Match</span>
+              <span class="match-rank">#{{ index + 1 }} Similar Player</span>
               <h4>{{ match.name }}</h4>
               <p>{{ match.position }} • {{ match.school }} • {{ match.conference }} • {{ match.lastSeason }}</p>
             </div>
@@ -210,9 +210,9 @@ function clearRecruitSelection() {
     </section>
 
     <section v-else-if="activeRecruit" class="compare-panel surface-panel empty-state">
-      <p class="eyebrow section-label">Historical Matches</p>
-      <h3>No historical matches configured.</h3>
-      <p>Add historical comparison results for this recruit to populate the page.</p>
+      <p class="eyebrow section-label">Top Matches</p>
+      <h3>No similar players found.</h3>
+      <p>Add more comparable players to the database for this position to populate the page.</p>
     </section>
 
     <section v-else class="compare-panel empty-panel surface-panel empty-state">
