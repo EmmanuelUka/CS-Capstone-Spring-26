@@ -1212,20 +1212,29 @@ def api_delete_user():
 
 ### End endpoint should check that the user has a valid session. Otherwise, prompt user to log in again
 
-@app.route("/data")
-def get_data():
-    # Assume this dictionary already exists
-    data = {
-        "name": "Alice",
-        "age": 25,
-        "skills": ["Python", "Flask", "JavaScript"]
-    }
-
-    return jsonify(data)
-
+@app.get('/api/demo-object')
+def demo_object():
+    return jsonify(
+        {
+            'id': 'demo-recruit-001',
+            'name': 'Jordan Example',
+            'position': 'QB',
+            'rating': 92,
+            'school': 'North Ridge High',
+            'offers': ['State University', 'Metro Tech', 'Lake College'],
+            'metrics': {
+                'height': '6-3',
+                'weight': 205,
+                'forty': 4.68,
+            },
+        }
+    )
 # =========================================================
 # Local Dev Entrypoint
 # =========================================================
+
+
+
 
 if __name__ == "__main__":
     # For local development only.
