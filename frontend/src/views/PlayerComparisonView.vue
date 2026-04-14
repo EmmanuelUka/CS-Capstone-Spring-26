@@ -1,59 +1,90 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import ComparisonBar from '../components/ComparisonBar.vue'
 import PlayerCard from '../components/PlayerCard.vue'
-import { getHistoricalMatches, getPlayerById } from '../data/mockRecruitingData'
-import { useRecruitingStore } from '../store/useRecruitingStore'
-import { playerIdsMatch } from '../utils/playerIds'
 
 const router = useRouter()
 const route = useRoute()
-const { state } = useRecruitingStore()
 const searchQuery = ref('')
+const activeRecruit = ref(null)
+const historicalMatches = ref([])
+const searchResults = ref([])
+const comparisonLoading = ref(false)
 
-const activeRecruit = computed(() => getPlayerById(route.query.recruitId))
-const historicalMatches = computed(() =>
-  activeRecruit.value ? getHistoricalMatches(activeRecruit.value.id) : []
-)
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
-const visibleSearchResults = computed(() => {
-  const matches = state.players.filter((player) => {
-    if (activeRecruit.value && playerIdsMatch(player.id, activeRecruit.value.id)) {
-      return false
+const hiddenSearchCount = computed(() => 0)
+
+async function loadActiveRecruit() {
+  if (!route.query.recruitId) {
+    activeRecruit.value = null
+    historicalMatches.value = []
+    comparisonLoading.value = false
+    return
+  }
+
+  comparisonLoading.value = true
+  historicalMatches.value = []
+
+  try {
+    const playerRes = await fetch(`/api/recruits/${route.query.recruitId}`, {
+      credentials: 'include',
+    })
+    activeRecruit.value = playerRes.ok ? (await playerRes.json()).player || null : null
+
+    const historicalRes = await fetch(`/api/recruits/${route.query.recruitId}/historical_matches`, {
+      credentials: 'include',
+    })
+    historicalMatches.value = historicalRes.ok ? await historicalRes.json() : []
+  } catch {
+    activeRecruit.value = null
+    historicalMatches.value = []
+  } finally {
+    comparisonLoading.value = false
+  }
+}
+
+async function loadSearchResults() {
+  try {
+    const params = new URLSearchParams({ limit: '8' })
+    if (searchQuery.value.trim()) {
+      params.set('query', searchQuery.value.trim())
+    }
+    if (activeRecruit.value?.id) {
+      params.set('excludeId', String(activeRecruit.value.id))
     }
 
-    if (!normalizedSearch.value) {
-      return true
+    const res = await fetch(`/api/recruits?${params.toString()}`, {
+      credentials: 'include',
+    })
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
     }
 
-    return [player.name, player.position, player.school, player.city, player.state]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedSearch.value)
-  })
+    const payload = await res.json()
+    searchResults.value = Array.isArray(payload.players) ? payload.players : []
+  } catch {
+    searchResults.value = []
+  }
+}
 
-  return matches.slice(0, 8)
-})
-const hiddenSearchCount = computed(() => {
-  const totalMatches = state.players.filter((player) => {
-    if (activeRecruit.value && playerIdsMatch(player.id, activeRecruit.value.id)) {
-      return false
-    }
+watch(
+  () => route.query.recruitId,
+  async () => {
+    await loadActiveRecruit()
+    await loadSearchResults()
+  },
+  { immediate: true }
+)
 
-    if (!normalizedSearch.value) {
-      return true
-    }
-
-    return [player.name, player.position, player.school, player.city, player.state]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedSearch.value)
-  }).length
-
-  return Math.max(totalMatches - visibleSearchResults.value.length, 0)
-})
+watch(
+  () => searchQuery.value,
+  () => {
+    loadSearchResults()
+  }
+)
 
 function openPlayer(playerId) {
   router.push(`/players/${playerId}`)
@@ -78,9 +109,9 @@ function clearRecruitSelection() {
     <section class="compare-header surface-panel">
       <div>
         <p class="eyebrow section-label">Comparison Page</p>
-        <h2>Open a recruit and inspect their closest historical matches.</h2>
+        <h2>Open a recruit and inspect their 3 closest database matches.</h2>
         <p>
-          Select one recruit to see the ranked historical player list. SuperScore is the average of the historical
+          Select one recruit to see the ranked top-3 similar players from the database. SuperScore is the average of the
           comparison scores shown on the bars below.
         </p>
       </div>
@@ -100,9 +131,9 @@ function clearRecruitSelection() {
           <small>{{ activeRecruit.position }} • Clear selection</small>
         </button>
 
-        <div v-if="visibleSearchResults.length" class="search-results">
+        <div v-if="searchResults.length" class="search-results">
           <button
-            v-for="player in visibleSearchResults"
+            v-for="player in searchResults"
             :key="player.id"
             class="search-result"
             type="button"
@@ -119,7 +150,7 @@ function clearRecruitSelection() {
         </p>
 
         <p v-if="hiddenSearchCount > 0" class="search-meta">
-          Showing the first {{ visibleSearchResults.length }} matches. Refine the search to narrow {{ hiddenSearchCount }} more.
+          Showing the first {{ searchResults.length }} matches. Refine the search to narrow {{ hiddenSearchCount }} more.
         </p>
       </div>
     </section>
@@ -133,9 +164,15 @@ function clearRecruitSelection() {
       />
     </section>
 
-    <section v-if="activeRecruit && historicalMatches.length" class="compare-panel surface-panel">
+    <section v-if="route.query.recruitId && comparisonLoading" class="compare-panel surface-panel empty-state">
+      <p class="eyebrow section-label">Top Matches</p>
+      <h3>Loading similar players...</h3>
+      <p>The comparison is running now.</p>
+    </section>
+
+    <section v-else-if="activeRecruit && historicalMatches.length" class="compare-panel surface-panel">
       <div class="section-head">
-        <p class="eyebrow section-label">Historical Matches</p>
+        <p class="eyebrow section-label">Top Matches</p>
         <h3>{{ activeRecruit.name }} ranked by SuperScore</h3>
       </div>
 
@@ -149,7 +186,7 @@ function clearRecruitSelection() {
         >
           <div class="historical-head">
             <div>
-              <span class="match-rank">#{{ index + 1 }} Historical Match</span>
+              <span class="match-rank">#{{ index + 1 }} Similar Player</span>
               <h4>{{ match.name }}</h4>
               <p>{{ match.position }} • {{ match.school }} • {{ match.conference }} • {{ match.lastSeason }}</p>
             </div>
@@ -188,9 +225,9 @@ function clearRecruitSelection() {
     </section>
 
     <section v-else-if="activeRecruit" class="compare-panel surface-panel empty-state">
-      <p class="eyebrow section-label">Historical Matches</p>
-      <h3>No historical matches configured.</h3>
-      <p>Add historical comparison results for this recruit to populate the page.</p>
+      <p class="eyebrow section-label">Top Matches</p>
+      <h3>No similar players found.</h3>
+      <p>Add more comparable players to the database for this position to populate the page.</p>
     </section>
 
     <section v-else class="compare-panel empty-panel surface-panel empty-state">

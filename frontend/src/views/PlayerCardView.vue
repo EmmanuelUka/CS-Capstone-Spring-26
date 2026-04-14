@@ -1,12 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import PlayerCard from '../components/PlayerCard.vue'
 import ScoreBadge from '../components/ScoreBadge.vue'
-import { getComparables, getDisplayPlayerById } from '../data/mockRecruitingData'
-import { useRecruitingStore } from '../store/useRecruitingStore'
-import { playerIdsMatch } from '../utils/playerIds'
+import { deletePlayerRecord } from '../services/recruitingClient'
 
 const props = defineProps({
   playerId: {
@@ -16,12 +14,51 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const { state } = useRecruitingStore()
+const player = ref(null)
+const comparables = ref([])
+const previousPlayerId = ref(null)
+const nextPlayerId = ref(null)
+const loading = ref(true)
+const deleting = ref(false)
 
-const player = computed(() => getDisplayPlayerById(props.playerId))
-const comparables = computed(() =>
-  player.value && !player.value.isHistorical ? getComparables(player.value) : []
+async function loadPlayer() {
+  loading.value = true
+  player.value = null
+  comparables.value = []
+  previousPlayerId.value = null
+  nextPlayerId.value = null
+
+  try {
+    const res = await fetch(`/api/recruits/${props.playerId}`, {
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const payload = await res.json()
+    player.value = payload.player || null
+    comparables.value = Array.isArray(payload.comparables) ? payload.comparables : []
+    previousPlayerId.value = payload.previousPlayerId || null
+    nextPlayerId.value = payload.nextPlayerId || null
+  } catch {
+    player.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => props.playerId,
+  () => {
+    loadPlayer()
+  }
 )
+
+onMounted(() => {
+  loadPlayer()
+})
+
 const playerSubtitle = computed(() => {
   if (!player.value) {
     return ''
@@ -33,17 +70,6 @@ const playerSubtitle = computed(() => {
 
   return `${player.value.projectedPosition} • ${player.value.school} • Class of ${player.value.classYear}`
 })
-const playerIndex = computed(() =>
-  state.players.findIndex((entry) => playerIdsMatch(entry.id, props.playerId))
-)
-const previousPlayerId = computed(() =>
-  playerIndex.value > 0 ? state.players[playerIndex.value - 1].id : null
-)
-const nextPlayerId = computed(() =>
-  playerIndex.value >= 0 && playerIndex.value < state.players.length - 1
-    ? state.players[playerIndex.value + 1].id
-    : null
-)
 
 function openComparison(playerId) {
   router.push(`/compare?recruitId=${playerId}`)
@@ -52,10 +78,36 @@ function openComparison(playerId) {
 function openPlayer(playerId) {
   router.push(`/players/${playerId}`)
 }
+
+async function deletePlayer() {
+  if (!player.value || player.value.isHistorical || deleting.value) {
+    return
+  }
+
+  const confirmed = window.confirm(`Delete ${player.value.name}?`)
+  if (!confirmed) {
+    return
+  }
+
+  deleting.value = true
+  try {
+    await deletePlayerRecord(player.value.id)
+    router.push('/players')
+  } catch (error) {
+    console.error('Error deleting player:', error?.message || error)
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
-  <section v-if="player" class="detail-layout">
+  <section v-if="loading" class="content-panel surface-panel">
+    <p class="eyebrow section-label">Player Card</p>
+    <h2>Loading player...</h2>
+  </section>
+
+  <section v-else-if="player" class="detail-layout">
     <div class="detail-main">
       <div class="page-header">
         <div>
@@ -63,7 +115,18 @@ function openPlayer(playerId) {
           <h2>{{ player.name }}</h2>
           <p>{{ playerSubtitle }}</p>
         </div>
-        <button class="ghost-button" type="button" @click="router.push('/players')">Back to board</button>
+        <div class="header-actions">
+          <button class="ghost-button" type="button" @click="router.push('/players')">Back to board</button>
+          <button
+            v-if="!player.isHistorical"
+            class="delete-button"
+            type="button"
+            :disabled="deleting"
+            @click="deletePlayer"
+          >
+            {{ deleting ? 'Deleting...' : 'Delete Player' }}
+          </button>
+        </div>
       </div>
 
       <PlayerCard :player="player" @compare="openComparison" @open="openPlayer" />
@@ -180,6 +243,13 @@ function openPlayer(playerId) {
   align-items: start;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .page-header h2,
 .section-header h3 {
   margin: 0.3rem 0 0;
@@ -230,6 +300,21 @@ function openPlayer(playerId) {
 .compare-row,
 .ghost-button {
   cursor: pointer;
+}
+
+.delete-button {
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  font-weight: 700;
+}
+
+.delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .compare-row {

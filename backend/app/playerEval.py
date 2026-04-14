@@ -588,7 +588,8 @@ def evaluate(
         context    = _eval_context(recruit, comp, recruit_norm, comp_norm)
 
         # Recency: players from more recent seasons are weighted higher
-        recency = 1.0 / (CURRENT_YEAR - comp.last_season + 1)
+        seasons_ago = max(0, CURRENT_YEAR - comp.last_season)
+        recency = 1.0 / (seasons_ago + 1)
         recency = max(0.1, min(1.0, recency))
 
         final_score = (

@@ -1,14 +1,20 @@
-import { computed, reactive, watch } from 'vue'
+import { reactive } from 'vue'
 
-import {
-  getPlayerById,
-  players,
-  shortlists as defaultShortlists,
-} from '../data/mockRecruitingData'
 import { EVAL_POSITIONS } from '../data/positionStats'
-import { normalizePlayerId, playerIdListIncludes, playerIdsMatch } from '../utils/playerIds'
-
-const STORAGE_KEY = 'hashmark-recruiting-prototype'
+import { playerIdsMatch } from '../utils/playerIds'
+import {
+  addShortlistSlot,
+  assignPlayerToShortlist,
+  clearPlayerFromShortlist,
+  createArchetypeRecord,
+  createShortlistRecord,
+  deleteArchetypeRecord,
+  deleteShortlistRecord,
+  fetchPlayers,
+  listArchetypes,
+  listShortlists,
+  removeShortlistSlot,
+} from '../services/recruitingClient'
 
 const defaultFilters = {
   query: '',
@@ -18,55 +24,8 @@ const defaultFilters = {
   ratingFloor: 0,
 }
 
-const defaultArchetypes = [
-  {
-    id: 'archetype-running-qb',
-    name: 'Running QB',
-    position: 'QB',
-    notes: 'Dual-threat quarterback profile for zone-read and designed movement packages.',
-    minimums: [
-      { statKey: 'rushYards', minValue: 350 },
-      { statKey: 'passingYards', minValue: 2200 },
-    ],
-  },
-  {
-    id: 'archetype-boundary-x',
-    name: 'Boundary X',
-    position: 'WR',
-    notes: 'Outside receiver profile for vertical shots and red-zone isolation.',
-    minimums: [
-      { statKey: 'receivingYards', minValue: 900 },
-      { statKey: 'touchdowns', minValue: 10 },
-    ],
-  },
-]
-
-const rosterPositions = [...new Set([...EVAL_POSITIONS, ...players.map((player) => player.position)])].sort()
-
-function deepClone(value) {
-  return JSON.parse(JSON.stringify(value))
-}
-
-function loadPersistedState() {
-  if (typeof window === 'undefined') {
-    return {}
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
-}
-
-function createEmptySlots() {
-  return rosterPositions.map((position) => ({
-    id: `slot-${position.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`,
-    position,
-    playerId: null,
-  }))
-}
+const fallbackRosterPositions = [...new Set(EVAL_POSITIONS)].sort()
+const rosterPositions = reactive([...fallbackRosterPositions])
 
 function createSlotsForPositions(positions = []) {
   return positions
@@ -78,12 +37,21 @@ function createSlotsForPositions(positions = []) {
     }))
 }
 
-function normalizeShortlist(list) {
+function getPlayerByIdFromList(players, playerId) {
+  return players.find((player) => playerIdsMatch(player.id, playerId)) || null
+}
+
+function refreshRosterPositions(playersList = []) {
+  const nextPositions = [...new Set([...EVAL_POSITIONS, ...playersList.map((player) => player.position).filter(Boolean)])].sort()
+  rosterPositions.splice(0, rosterPositions.length, ...(nextPositions.length ? nextPositions : fallbackRosterPositions))
+}
+
+function normalizeShortlist(list, playersList = []) {
   const slotPositions = Array.isArray(list.slots)
     ? list.slots.map((slot) => slot.position)
     : Array.isArray(list.playerIds)
       ? list.playerIds
-          .map((playerId) => getPlayerById(playerId)?.position)
+          .map((playerId) => getPlayerByIdFromList(playersList, playerId)?.position)
           .filter(Boolean)
       : []
   const nextSlots = createSlotsForPositions(slotPositions.length ? slotPositions : rosterPositions)
@@ -91,20 +59,14 @@ function normalizeShortlist(list) {
   if (Array.isArray(list.slots)) {
     for (const slot of list.slots) {
       const target = nextSlots.find((entry) => !entry._claimed && entry.position === slot.position)
-      if (target && getPlayerById(slot.playerId)?.position === slot.position) {
+      if (
+        target &&
+        (playersList.length === 0 || getPlayerByIdFromList(playersList, slot.playerId)?.position === slot.position)
+      ) {
         target.playerId = slot.playerId
       }
       if (target) {
         target.id = slot.id || target.id
-        target._claimed = true
-      }
-    }
-  } else if (Array.isArray(list.playerIds)) {
-    for (const playerId of list.playerIds) {
-      const player = getPlayerById(playerId)
-      const target = nextSlots.find((entry) => !entry._claimed && entry.position === player?.position)
-      if (player && target && !target.playerId) {
-        target.playerId = player.id
         target._claimed = true
       }
     }
@@ -118,42 +80,23 @@ function normalizeShortlist(list) {
   }
 }
 
-const persisted = loadPersistedState()
-const persistedFilters = persisted.filters || {}
-const normalizedPersistedFilters = {
-  ...persistedFilters,
-  type: persistedFilters.type || persistedFilters.evaluationStatus || 'All',
-}
+refreshRosterPositions()
 
 const state = reactive({
-  players,
-  filters: {
-    ...defaultFilters,
-    ...normalizedPersistedFilters,
-  },
-  shortlists: (persisted.shortlists || deepClone(defaultShortlists)).map(normalizeShortlist),
-  archetypes: persisted.archetypes || deepClone(defaultArchetypes),
-  compareSelection:
-    persisted.compareSelection && persisted.compareSelection.length
-      ? persisted.compareSelection
-      : [1, 2],
-  ready: true,
+  players: [],
+  filters: { ...defaultFilters },
+  shortlists: [],
+  archetypes: [],
+  playersLoaded: false,
+  playersLoading: false,
+  playersError: '',
+  shortlistsLoaded: false,
+  shortlistsLoading: false,
+  shortlistsError: '',
+  archetypesLoaded: false,
+  archetypesLoading: false,
+  archetypesError: '',
 })
-
-if (typeof window !== 'undefined') {
-  watch(
-    () => ({
-      filters: state.filters,
-      shortlists: state.shortlists,
-      archetypes: state.archetypes,
-      compareSelection: state.compareSelection,
-    }),
-    (value) => {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
-    },
-    { deep: true }
-  )
-}
 
 function setFilters(nextFilters) {
   state.filters = {
@@ -166,45 +109,138 @@ function resetFilters() {
   state.filters = { ...defaultFilters }
 }
 
-function setCompareSelection(ids) {
-  const uniqueIds = [...new Set(ids.map(normalizePlayerId).filter((id) => getPlayerById(id)))]
-  state.compareSelection = uniqueIds
+let playersPromise = null
+
+async function ensurePlayersLoaded() {
+  if (state.playersLoaded) {
+    return state.players
+  }
+
+  if (playersPromise) {
+    return playersPromise
+  }
+
+  state.playersLoading = true
+  state.playersError = ''
+
+  playersPromise = fetchPlayers()
+    .then((payload) => {
+      const nextPlayers = Array.isArray(payload.players) ? payload.players : []
+      state.players = nextPlayers
+      refreshRosterPositions(nextPlayers)
+      state.shortlists = state.shortlists.map((list) => normalizeShortlist(list, nextPlayers))
+      state.playersLoaded = true
+      return nextPlayers
+    })
+    .catch((error) => {
+      state.playersError = error.message || 'Unable to load players'
+      throw error
+    })
+    .finally(() => {
+      state.playersLoading = false
+      playersPromise = null
+    })
+
+  return playersPromise
 }
 
-function toggleComparePlayer(playerId) {
-  const normalizedPlayerId = normalizePlayerId(playerId)
+let shortlistsPromise = null
 
-  if (playerIdListIncludes(state.compareSelection, normalizedPlayerId)) {
-    state.compareSelection = state.compareSelection.filter(
-      (id) => !playerIdsMatch(id, normalizedPlayerId)
-    )
+async function ensureShortlistsLoaded() {
+  if (state.shortlistsLoaded) {
+    return state.shortlists
+  }
+
+  if (shortlistsPromise) {
+    return shortlistsPromise
+  }
+
+  state.shortlistsLoading = true
+  state.shortlistsError = ''
+
+  shortlistsPromise = listShortlists()
+    .then((shortlists) => {
+      state.shortlists = shortlists.map((list) => normalizeShortlist(list, state.players))
+      state.shortlistsLoaded = true
+      return state.shortlists
+    })
+    .catch((error) => {
+      state.shortlistsError = error.message || 'Unable to load shortlists'
+      throw error
+    })
+    .finally(() => {
+      state.shortlistsLoading = false
+      shortlistsPromise = null
+    })
+
+  return shortlistsPromise
+}
+
+let archetypesPromise = null
+
+async function ensureArchetypesLoaded() {
+  if (state.archetypesLoaded) {
+    return state.archetypes
+  }
+
+  if (archetypesPromise) {
+    return archetypesPromise
+  }
+
+  state.archetypesLoading = true
+  state.archetypesError = ''
+
+  archetypesPromise = listArchetypes()
+    .then((archetypes) => {
+      state.archetypes = archetypes
+      state.archetypesLoaded = true
+      return archetypes
+    })
+    .catch((error) => {
+      state.archetypesError = error.message || 'Unable to load archetypes'
+      throw error
+    })
+    .finally(() => {
+      state.archetypesLoading = false
+      archetypesPromise = null
+    })
+
+  return archetypesPromise
+}
+
+function getPlayerById(playerId) {
+  return getPlayerByIdFromList(state.players, playerId)
+}
+
+async function createShortlist({ name, color, positions }) {
+  const nextPositions = (positions?.length ? positions : [rosterPositions[0]]).filter(Boolean)
+  if (!nextPositions.length) {
     return
   }
 
-  state.compareSelection = [...state.compareSelection, normalizedPlayerId]
+  const shortlist = await createShortlistRecord({
+    name,
+    color,
+    positions: nextPositions,
+  })
+  state.shortlists = [normalizeShortlist(shortlist, state.players), ...state.shortlists]
+  state.shortlistsLoaded = true
 }
 
-function createShortlist({ name, color, positions }) {
-  const shortlist = {
-    id: `shortlist-${Date.now()}`,
-    name: name.trim() || 'Untitled Group',
-    color: color || '#ffb75e',
-    slots: createSlotsForPositions(positions?.length ? positions : [rosterPositions[0]]),
-  }
-  state.shortlists = [shortlist, ...state.shortlists]
-}
-
-function deleteShortlist(shortlistId) {
+async function deleteShortlist(shortlistId) {
+  await deleteShortlistRecord(shortlistId)
   state.shortlists = state.shortlists.filter((list) => list.id !== shortlistId)
+  state.shortlistsLoaded = true
 }
 
-function addPlayerToShortlist(shortlistId, position, playerId) {
+async function addPlayerToShortlist(shortlistId, position, playerId) {
   const player = getPlayerById(playerId)
 
   if (!player || player.position !== position) {
     return
   }
 
+  await assignPlayerToShortlist(shortlistId, position, playerId)
   state.shortlists = state.shortlists.map((list) =>
     list.id !== shortlistId
       ? list
@@ -215,9 +251,11 @@ function addPlayerToShortlist(shortlistId, position, playerId) {
           ),
         }
   )
+  state.shortlistsLoaded = true
 }
 
-function removePlayerFromShortlist(shortlistId, slotId) {
+async function removePlayerFromShortlist(shortlistId, slotId) {
+  await clearPlayerFromShortlist(shortlistId, slotId)
   state.shortlists = state.shortlists.map((list) =>
     list.id !== shortlistId
       ? list
@@ -228,24 +266,28 @@ function removePlayerFromShortlist(shortlistId, slotId) {
           ),
         }
   )
+  state.shortlistsLoaded = true
 }
 
-function addPositionSlot(shortlistId, position) {
+async function addPositionSlot(shortlistId, position) {
   if (!rosterPositions.includes(position)) {
     return
   }
 
+  const slot = await addShortlistSlot(shortlistId, position)
   state.shortlists = state.shortlists.map((list) =>
     list.id !== shortlistId
       ? list
       : {
           ...list,
-          slots: [...list.slots, ...createSlotsForPositions([position])],
+          slots: [...list.slots, slot],
         }
   )
+  state.shortlistsLoaded = true
 }
 
-function removePositionSlot(shortlistId, slotId) {
+async function removePositionSlot(shortlistId, slotId) {
+  await removeShortlistSlot(shortlistId, slotId)
   state.shortlists = state.shortlists.map((list) =>
     list.id !== shortlistId
       ? list
@@ -254,9 +296,10 @@ function removePositionSlot(shortlistId, slotId) {
           slots: list.slots.filter((slot) => slot.id !== slotId),
         }
   )
+  state.shortlistsLoaded = true
 }
 
-function createArchetype({ name, position, notes, minimums }) {
+async function createArchetype({ name, position, notes, minimums }) {
   const normalizedMinimums = (minimums || [])
     .filter((rule) => rule?.statKey && Number.isFinite(Number(rule.minValue)))
     .map((rule) => ({
@@ -276,46 +319,26 @@ function createArchetype({ name, position, notes, minimums }) {
     minimums: normalizedMinimums,
   }
 
+  await createArchetypeRecord(archetype)
   state.archetypes = [archetype, ...state.archetypes]
+  state.archetypesLoaded = true
 }
 
-function deleteArchetype(archetypeId) {
+async function deleteArchetype(archetypeId) {
+  await deleteArchetypeRecord(archetypeId)
   state.archetypes = state.archetypes.filter((archetype) => archetype.id !== archetypeId)
+  state.archetypesLoaded = true
 }
-
-const filteredPlayers = computed(() =>
-  state.players.filter((player) => {
-    const query = state.filters.query.trim().toLowerCase()
-    const matchesQuery =
-      !query ||
-      [player.name, player.school, player.city]
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
-
-    const matchesPosition =
-      state.filters.position === 'All' || player.position === state.filters.position
-    const matchesState = state.filters.state === 'All' || player.state === state.filters.state
-    const matchesType = state.filters.type === 'All' || player.type === state.filters.type
-    const matchesRating = player.rating >= state.filters.ratingFloor
-
-    return matchesQuery && matchesPosition && matchesState && matchesType && matchesRating
-  })
-)
-
-const comparePlayers = computed(() =>
-  state.compareSelection.map((id) => getPlayerById(id)).filter(Boolean)
-)
 
 export function useRecruitingStore() {
   return {
     state,
-    filteredPlayers,
-    comparePlayers,
+    ensurePlayersLoaded,
+    ensureShortlistsLoaded,
+    ensureArchetypesLoaded,
+    getPlayerById,
     setFilters,
     resetFilters,
-    setCompareSelection,
-    toggleComparePlayer,
     createShortlist,
     deleteShortlist,
     addPlayerToShortlist,

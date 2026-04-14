@@ -841,9 +841,9 @@ def print_db_state(db_path: str = None):
     _print_df(db.get_historical_players_df())
 
     # ── Player Stats (pivot) ──────────────────────────────────────────────────
-    _subheader("PLAYER STATS  (pivoted)")
-    pivot = db.get_players_stats_pivot()
-    _print_df(pivot)
+    # _subheader("PLAYER STATS  (pivoted)")
+    # pivot = db.get_players_stats_pivot()
+    # _print_df(pivot)
 
     # ── Evaluations ───────────────────────────────────────────────────────────
     _subheader("PLAYER EVALUATIONS")

@@ -23,8 +23,16 @@ import sqlite3
 import pandas as pd
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 
 DB_NAME = "hashmark_players.db"
+
+
+def get_db_path() -> Path:
+    db_name = Path(DB_NAME)
+    if db_name.is_absolute():
+        return db_name
+    return Path(__file__).resolve().parent / db_name
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +41,7 @@ DB_NAME = "hashmark_players.db"
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(get_db_path())
     conn.execute("PRAGMA foreign_keys = ON;")
     try:
         yield conn
@@ -154,6 +162,9 @@ def init_db():
             weight              REAL,       -- lbs or kg, caller's choice
             context_multiplier  REAL,       -- e.g. 1.43 for strong competition context
             confidence          REAL,       -- 0.0 – 100.0
+            physical_score      REAL,       -- composite physical score (0.0 – 1.0)
+            production_score    REAL,       -- stat-based production score (0.0 – 1.0)
+            context_score       REAL,       -- contextual/situational score (0.0 – 1.0)
             evaluated_at        TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (player_id) REFERENCES players(id)
         );
@@ -189,7 +200,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS schemes (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            name    TEXT
+            name    TEXT,
+            color   TEXT
         );
 
         -- ----------------------------------------------------------------
@@ -235,6 +247,58 @@ def init_db():
             activity_time  TEXT NOT NULL DEFAULT (datetime('now'))
         );
         """)
+
+    # ------------------------------------------------------------------
+    # Migration: add new score columns to player_evaluations if this is
+    # an existing database created before these fields were introduced.
+    # ALTER TABLE ADD COLUMN is a no-op-safe operation in SQLite when the
+    # column does not yet exist; we catch the OperationalError for safety.
+    # ------------------------------------------------------------------
+    _migrate_player_evaluations()
+    _migrate_schemes()
+
+
+def _migrate_player_evaluations():
+    """Add physical_score / production_score / context_score to player_evaluations
+    if they are not already present (safe to call on every startup)."""
+    new_columns = [
+        ("physical_score",   "REAL"),
+        ("production_score", "REAL"),
+        ("context_score",    "REAL"),
+    ]
+    with get_conn() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(player_evaluations)"
+            ).fetchall()
+        }
+        for col_name, col_type in new_columns:
+            if col_name not in existing:
+                conn.execute(
+                    f"ALTER TABLE player_evaluations ADD COLUMN {col_name} {col_type}"
+                )
+                conn.execute(
+                    "INSERT INTO log_activity (activity_name, activity_notes) VALUES (?, ?)",
+                    ("migrate_schema", f"Added column player_evaluations.{col_name}"),
+                )
+
+
+def _migrate_schemes():
+    """Add color to schemes if it is not already present."""
+    with get_conn() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(schemes)"
+            ).fetchall()
+        }
+        if "color" not in existing:
+            conn.execute("ALTER TABLE schemes ADD COLUMN color TEXT")
+            conn.execute(
+                "INSERT INTO log_activity (activity_name, activity_notes) VALUES (?, ?)",
+                ("migrate_schema", "Added column schemes.color"),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -597,6 +661,30 @@ def update_player(
 
 def delete_player(player_id: int):
     with get_conn() as conn:
+        conn.execute(
+            """
+            DELETE FROM scheme_assignments
+            WHERE player_id = ?
+            """,
+            (player_id,),
+        )
+        conn.execute(
+            """
+            DELETE FROM player_comparisons
+            WHERE evaluation_id IN (
+                SELECT id FROM player_evaluations WHERE player_id = ?
+            )
+            """,
+            (player_id,),
+        )
+        conn.execute(
+            "DELETE FROM player_stats WHERE player_id = ?",
+            (player_id,),
+        )
+        conn.execute(
+            "DELETE FROM player_evaluations WHERE player_id = ?",
+            (player_id,),
+        )
         conn.execute("DELETE FROM players WHERE id = ?", (player_id,))
     log("delete_player", f"id={player_id}")
 
@@ -716,19 +804,37 @@ def insert_player_evaluation(
     weight: float = None,
     context_multiplier: float = None,
     confidence: float = None,
+    physical_score: float = None,
+    production_score: float = None,
+    context_score: float = None,
 ) -> int:
     """
     Create a new evaluation record and update the player's evaluation_id pointer.
-    Returns the new evaluation id.
+
+    Args:
+        player_id:          ID of the player being evaluated.
+        height:             Height in inches (or cm — caller's choice).
+        weight:             Weight in lbs (or kg — caller's choice).
+        context_multiplier: Competition-context multiplier, e.g. 1.43.
+        confidence:         Overall confidence in the evaluation (0.0 – 100.0).
+        physical_score:     Composite physical score derived from height/weight
+                            comparisons (0.0 – 1.0).
+        production_score:   Stat-based production score (0.0 – 1.0).
+        context_score:      Contextual/situational score (0.0 – 1.0).
+
+    Returns:
+        The newly created evaluation id.
     """
     with get_conn() as conn:
         cur = conn.execute(
             """
             INSERT INTO player_evaluations
-                (player_id, height, weight, context_multiplier, confidence)
-            VALUES (?, ?, ?, ?, ?)
+                (player_id, height, weight, context_multiplier, confidence,
+                 physical_score, production_score, context_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (player_id, height, weight, context_multiplier, confidence),
+            (player_id, height, weight, context_multiplier, confidence,
+             physical_score, production_score, context_score),
         )
         eval_id = cur.lastrowid
         # Point the player to their latest evaluation
@@ -746,7 +852,24 @@ def update_player_evaluation(
     weight: float = None,
     context_multiplier: float = None,
     confidence: float = None,
+    physical_score: float = None,
+    production_score: float = None,
+    context_score: float = None,
 ):
+    """
+    Partially update an existing evaluation.  Only non-None arguments are written;
+    omitted arguments leave the stored value unchanged.
+
+    Args:
+        evaluation_id:      ID of the evaluation to update.
+        height:             Updated height value.
+        weight:             Updated weight value.
+        context_multiplier: Updated competition-context multiplier.
+        confidence:         Updated confidence (0.0 – 100.0).
+        physical_score:     Updated composite physical score (0.0 – 1.0).
+        production_score:   Updated stat-based production score (0.0 – 1.0).
+        context_score:      Updated contextual/situational score (0.0 – 1.0).
+    """
     with get_conn() as conn:
         conn.execute(
             """
@@ -754,32 +877,43 @@ def update_player_evaluation(
             SET height             = COALESCE(?, height),
                 weight             = COALESCE(?, weight),
                 context_multiplier = COALESCE(?, context_multiplier),
-                confidence         = COALESCE(?, confidence)
+                confidence         = COALESCE(?, confidence),
+                physical_score     = COALESCE(?, physical_score),
+                production_score   = COALESCE(?, production_score),
+                context_score      = COALESCE(?, context_score)
             WHERE id = ?
             """,
-            (height, weight, context_multiplier, confidence, evaluation_id),
+            (height, weight, context_multiplier, confidence,
+             physical_score, production_score, context_score,
+             evaluation_id),
         )
     log("update_player_evaluation", f"id={evaluation_id}")
 
 
 def get_evaluation(evaluation_id: int) -> dict | None:
+    """
+    Fetch a single evaluation by id.
+
+    Returns a dict whose keys mirror the player_evaluations columns
+    (including physical_score, production_score, context_score),
+    or None if no matching row exists.
+    """
     with get_conn() as conn:
-        row = conn.execute(
+        cur = conn.execute(
             "SELECT * FROM player_evaluations WHERE id = ?", (evaluation_id,)
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if row is None:
             return None
-        cols = [d[0] for d in conn.execute(
-            "SELECT * FROM player_evaluations WHERE id = ?", (evaluation_id,)
-        ).description]
-        # re-fetch with description accessible
-        row2 = conn.execute(
-            "SELECT * FROM player_evaluations WHERE id = ?", (evaluation_id,)
-        ).fetchone()
-        return dict(zip(cols, row2))
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
 
 
 def get_evaluations_df() -> pd.DataFrame:
+    """
+    Return all evaluations joined to player names, ordered newest-first.
+    Includes physical_score, production_score, and context_score columns.
+    """
     with get_conn() as conn:
         return pd.read_sql_query(
             """
@@ -865,18 +999,31 @@ def get_all_comparisons_df() -> pd.DataFrame:
 # Schemes (shortlists)
 # ---------------------------------------------------------------------------
 
-def insert_scheme(user_id: int, name: str) -> int:
+def insert_scheme(user_id: int, name: str, color: str = None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO schemes (user_id, name) VALUES (?, ?)",
-            (user_id, name),
+            "INSERT INTO schemes (user_id, name, color) VALUES (?, ?, ?)",
+            (user_id, name, color),
         )
-        _log_conn(conn, "insert_scheme", f"name={name}, user_id={user_id}")
+        _log_conn(conn, "insert_scheme", f"name={name}, user_id={user_id}, color={color}")
         return cur.lastrowid
 
 
 def delete_scheme(scheme_id: int):
     with get_conn() as conn:
+        conn.execute(
+            """
+            DELETE FROM scheme_assignments
+            WHERE scheme_position_id IN (
+                SELECT id FROM scheme_positions WHERE scheme_id = ?
+            )
+            """,
+            (scheme_id,),
+        )
+        conn.execute(
+            "DELETE FROM scheme_positions WHERE scheme_id = ?",
+            (scheme_id,),
+        )
         conn.execute("DELETE FROM schemes WHERE id = ?", (scheme_id,))
     log("delete_scheme", f"id={scheme_id}")
 
@@ -1065,13 +1212,16 @@ if __name__ == "__main__":
     insert_player_stat(brady_id,   pass_yds_id, 4500.0)
     insert_player_stat(mahomes_id, pass_yds_id, 5250.0)
 
-    # --- Evaluation + comparison for Mahomes ---
+    # --- Evaluation + comparison for Mahomes (now includes score fields) ---
     eval_id = insert_player_evaluation(
         mahomes_id,
-        height=74.0,   # inches
-        weight=227.0,  # lbs
+        height=74.0,              # inches
+        weight=227.0,             # lbs
         context_multiplier=1.43,
         confidence=100.0,
+        physical_score=0.5417,
+        production_score=0.0,
+        context_score=0.2778,
     )
 
     insert_player_comparison(
@@ -1114,6 +1264,9 @@ if __name__ == "__main__":
 
     print("\n=== Archetypes ===")
     print(get_archetypes_df().to_string(index=False))
+
+    print("\n=== Evaluations (with score fields) ===")
+    print(get_evaluations_df().to_string(index=False))
 
     print("\n=== Recent Activity Log ===")
     print(get_recent_activity(10).to_string(index=False))
