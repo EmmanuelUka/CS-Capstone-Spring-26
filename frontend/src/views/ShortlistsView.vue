@@ -17,6 +17,7 @@ const {
   rosterPositions,
   getPlayerById,
   ensurePlayersLoaded,
+  ensureShortlistsLoaded,
 } = useRecruitingStore()
 
 const form = ref({
@@ -53,8 +54,8 @@ const groups = computed(() =>
   }))
 )
 
-function submitShortlist() {
-  createShortlist(form.value)
+async function submitShortlist() {
+  await createShortlist(form.value)
   form.value = { name: '', color: '#ffb75e', positions: ['QB', 'WR'] }
   listSlotSelection.value = rosterPositions[0] || ''
 }
@@ -71,16 +72,16 @@ function removeDraftSlot(index) {
   form.value.positions = form.value.positions.filter((_, slotIndex) => slotIndex !== index)
 }
 
-function addSlotToList(shortlistId) {
+async function addSlotToList(shortlistId) {
   if (!newSlotPosition.value) {
     return
   }
 
-  addPositionSlot(shortlistId, newSlotPosition.value)
+  await addPositionSlot(shortlistId, newSlotPosition.value)
 }
 
 onMounted(() => {
-  ensurePlayersLoaded().catch(() => {})
+  Promise.all([ensurePlayersLoaded(), ensureShortlistsLoaded()]).catch(() => {})
 })
 </script>
 
