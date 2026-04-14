@@ -7,7 +7,7 @@ import PlayerCard from '../components/PlayerCard.vue'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
 const router = useRouter()
-const { state, filteredPlayers, setFilters, toggleComparePlayer, rosterPositions } = useRecruitingStore()
+const { state, filteredPlayers, setFilters, rosterPositions } = useRecruitingStore()
 
 const filterOptions = computed(() => ({
   positions: ['All', ...rosterPositions],
@@ -24,8 +24,7 @@ function openPlayer(playerId) {
 }
 
 function comparePlayer(playerId) {
-  toggleComparePlayer(playerId)
-  router.push('/compare')
+  router.push(`/compare?recruitId=${playerId}`)
 }
 </script>
 

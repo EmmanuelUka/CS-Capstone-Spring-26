@@ -152,7 +152,7 @@ function getSummaryEntries(player, compact) {
       <button class="primary-button" type="button" @click="emit('open', player.id)">
         Open Card
       </button>
-      <button class="secondary-button" type="button" @click="emit('compare', player.id)">
+      <button v-if="!player.isHistorical" class="secondary-button" type="button" @click="emit('compare', player.id)">
         Compare
       </button>
     </div>

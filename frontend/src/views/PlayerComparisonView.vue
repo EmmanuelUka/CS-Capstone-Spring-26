@@ -1,27 +1,26 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
+import ComparisonBar from '../components/ComparisonBar.vue'
 import PlayerCard from '../components/PlayerCard.vue'
-import ScoreBadge from '../components/ScoreBadge.vue'
+import { getHistoricalMatches, getPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
-import { playerIdListIncludes } from '../utils/playerIds'
+import { playerIdsMatch } from '../utils/playerIds'
 
 const router = useRouter()
-const { state, comparePlayers, toggleComparePlayer } = useRecruitingStore()
+const route = useRoute()
+const { state } = useRecruitingStore()
 const searchQuery = ref('')
 
-const breakdownMetrics = [
-  ['Physical', 'physical', 'gold'],
-  ['Production', 'production', 'mint'],
-  ['Context', 'context', 'blue'],
-]
-
-const hasEnoughPlayers = computed(() => comparePlayers.value.length >= 2)
+const activeRecruit = computed(() => getPlayerById(route.query.recruitId))
+const historicalMatches = computed(() =>
+  activeRecruit.value ? getHistoricalMatches(activeRecruit.value.id) : []
+)
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
 const visibleSearchResults = computed(() => {
   const matches = state.players.filter((player) => {
-    if (playerIdListIncludes(state.compareSelection, player.id)) {
+    if (activeRecruit.value && playerIdsMatch(player.id, activeRecruit.value.id)) {
       return false
     }
 
@@ -38,13 +37,13 @@ const visibleSearchResults = computed(() => {
   return matches.slice(0, 8)
 })
 const hiddenSearchCount = computed(() => {
-  if (!normalizedSearch.value) {
-    return Math.max(state.players.length - state.compareSelection.length - visibleSearchResults.value.length, 0)
-  }
-
   const totalMatches = state.players.filter((player) => {
-    if (playerIdListIncludes(state.compareSelection, player.id)) {
+    if (activeRecruit.value && playerIdsMatch(player.id, activeRecruit.value.id)) {
       return false
+    }
+
+    if (!normalizedSearch.value) {
+      return true
     }
 
     return [player.name, player.position, player.school, player.city, player.state]
@@ -60,15 +59,17 @@ function openPlayer(playerId) {
   router.push(`/players/${playerId}`)
 }
 
-function comparePlayer(playerId) {
-  if (!playerIdListIncludes(state.compareSelection, playerId) || state.compareSelection.length > 2) {
-    toggleComparePlayer(playerId)
-  }
+function openHistoricalPlayer(playerId) {
+  router.push(`/players/${playerId}`)
 }
 
-function addPlayerToCompare(playerId) {
-  toggleComparePlayer(playerId)
+function selectRecruit(playerId) {
+  router.push(`/compare?recruitId=${playerId}`)
   searchQuery.value = ''
+}
+
+function clearRecruitSelection() {
+  router.push('/compare')
 }
 </script>
 
@@ -77,32 +78,27 @@ function addPlayerToCompare(playerId) {
     <section class="compare-header surface-panel">
       <div>
         <p class="eyebrow section-label">Comparison Page</p>
-        <h2>Build a side-by-side recruiting view.</h2>
-        <p>Search for players to add them to the comparison board. The selection persists locally while you move around the prototype.</p>
+        <h2>Open a recruit and inspect their closest historical matches.</h2>
+        <p>
+          Select one recruit to see the ranked historical player list. SuperScore is the average of the historical
+          comparison scores shown on the bars below.
+        </p>
       </div>
 
       <div class="compare-picker">
         <label class="search-field">
-          <span class="sr-only">Search players to compare</span>
+          <span class="sr-only">Search recruits to compare</span>
           <input
             v-model="searchQuery"
             type="search"
-            placeholder="Search by name, position, school, or location"
+            placeholder="Search recruits by name, position, school, or location"
           >
         </label>
 
-        <div class="selected-players" v-if="comparePlayers.length">
-          <button
-            v-for="player in comparePlayers"
-            :key="player.id"
-            class="selected-chip"
-            type="button"
-            @click="toggleComparePlayer(player.id)"
-          >
-            <span>{{ player.name }}</span>
-            <small>{{ player.position }} • Remove</small>
-          </button>
-        </div>
+        <button v-if="activeRecruit" class="selected-chip" type="button" @click="clearRecruitSelection">
+          <span>{{ activeRecruit.name }}</span>
+          <small>{{ activeRecruit.position }} • Clear selection</small>
+        </button>
 
         <div v-if="visibleSearchResults.length" class="search-results">
           <button
@@ -110,7 +106,7 @@ function addPlayerToCompare(playerId) {
             :key="player.id"
             class="search-result"
             type="button"
-            @click="addPlayerToCompare(player.id)"
+            @click="selectRecruit(player.id)"
           >
             <strong>{{ player.name }}</strong>
             <span>{{ player.position }} • {{ player.school }}</span>
@@ -119,7 +115,7 @@ function addPlayerToCompare(playerId) {
         </div>
 
         <p v-else class="search-empty">
-          {{ normalizedSearch ? 'No players matched that search.' : 'Start typing to narrow the board and add more players.' }}
+          {{ normalizedSearch ? 'No recruits matched that search.' : 'Select a recruit to load their historical matches.' }}
         </p>
 
         <p v-if="hiddenSearchCount > 0" class="search-meta">
@@ -128,55 +124,79 @@ function addPlayerToCompare(playerId) {
       </div>
     </section>
 
-    <section v-if="hasEnoughPlayers" class="card-grid">
+    <section v-if="activeRecruit" class="card-grid">
       <PlayerCard
-        v-for="player in comparePlayers"
-        :key="player.id"
-        :player="player"
+        :player="activeRecruit"
         compact
         @open="openPlayer"
-        @compare="comparePlayer"
+        @compare="selectRecruit"
       />
     </section>
 
-    <section v-if="hasEnoughPlayers" class="compare-panel surface-panel">
+    <section v-if="activeRecruit && historicalMatches.length" class="compare-panel surface-panel">
       <div class="section-head">
-        <p class="eyebrow section-label">Category Breakdown</p>
-        <h3>Score breakdown</h3>
+        <p class="eyebrow section-label">Historical Matches</p>
+        <h3>{{ activeRecruit.name }} ranked by SuperScore</h3>
       </div>
 
-      <div class="breakdown-grid">
-        <div v-for="player in comparePlayers" :key="player.id" class="breakdown-card">
-          <div class="breakdown-head">
-            <span class="section-label">{{ player.name }}</span>
-            <strong>{{ player.position }}</strong>
+      <div class="historical-grid">
+        <button
+          v-for="(match, index) in historicalMatches"
+          :key="match.historicalId"
+          class="historical-card"
+          type="button"
+          @click="openHistoricalPlayer(match.historicalId)"
+        >
+          <div class="historical-head">
+            <div>
+              <span class="match-rank">#{{ index + 1 }} Historical Match</span>
+              <h4>{{ match.name }}</h4>
+              <p>{{ match.position }} • {{ match.school }} • {{ match.conference }} • {{ match.lastSeason }}</p>
+            </div>
+
+            <div class="super-score">
+              <span>SuperScore</span>
+              <strong>{{ match.superScore }}</strong>
+            </div>
           </div>
 
-          <div class="breakdown-scores">
-            <ScoreBadge
-              v-for="[label, key, tone] in breakdownMetrics"
-              :key="`${player.id}-${key}`"
-              :label="label"
-              :value="player.breakdown[key]"
-              :tone="tone"
+          <div class="historical-bars">
+            <ComparisonBar
+              :left-value="match.comparisonScores.physical"
+              :right-value="100 - match.comparisonScores.physical"
+              left-label="Physical"
+              :value-display="match.comparisonScores.physical"
+              right-label=""
+            />
+            <ComparisonBar
+              :left-value="match.comparisonScores.production"
+              :right-value="100 - match.comparisonScores.production"
+              left-label="Production"
+              :value-display="match.comparisonScores.production"
+              right-label=""
+            />
+            <ComparisonBar
+              :left-value="match.comparisonScores.context"
+              :right-value="100 - match.comparisonScores.context"
+              left-label="Context"
+              :value-display="match.comparisonScores.context"
+              right-label=""
             />
           </div>
-        </div>
+        </button>
       </div>
     </section>
 
-    <section v-if="hasEnoughPlayers" class="summary-grid">
-      <article v-for="player in comparePlayers" :key="player.id" class="summary-card surface-panel">
-        <span>{{ player.name }}</span>
-        <strong>{{ player.comparisonScore }}</strong>
-        <p>Scheme fit {{ player.schemeFit }} • Confidence {{ player.confidenceScore }}</p>
-      </article>
+    <section v-else-if="activeRecruit" class="compare-panel surface-panel empty-state">
+      <p class="eyebrow section-label">Historical Matches</p>
+      <h3>No historical matches configured.</h3>
+      <p>Add historical comparison results for this recruit to populate the page.</p>
     </section>
 
     <section v-else class="compare-panel empty-panel surface-panel empty-state">
       <p class="eyebrow section-label">Comparison Page</p>
-      <h3>Select at least two players.</h3>
-      <p>The compare view will populate as soon as you choose a second player.</p>
+      <h3>Select a recruit.</h3>
+      <p>Once a recruit is selected, their closest historical players will appear here.</p>
     </section>
   </section>
 </template>
@@ -189,27 +209,26 @@ function addPlayerToCompare(playerId) {
 
 .compare-header h2,
 .section-head h3,
+.historical-head h4,
 .empty-panel h3 {
   margin: 0.3rem 0 0;
 }
 
 .compare-header p:last-child,
-.summary-card p,
+.historical-head p,
 .empty-panel p:last-child {
   margin: 0.35rem 0 0;
   color: var(--text-muted);
 }
 
 .card-grid,
-.summary-grid,
-.breakdown-grid,
-.breakdown-scores {
+.historical-grid,
+.historical-bars {
   display: grid;
   gap: 0.85rem;
 }
 
 .compare-picker,
-.selected-players,
 .search-results {
   display: grid;
   gap: 0.85rem;
@@ -222,10 +241,6 @@ function addPlayerToCompare(playerId) {
   border-radius: 18px;
   background: var(--bg-soft);
   color: var(--text);
-}
-
-.selected-players {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .selected-chip,
@@ -247,25 +262,27 @@ function addPlayerToCompare(playerId) {
     rgba(255, 255, 255, 0.035);
 }
 
-.selected-chip span {
-  color: var(--text);
-}
-
 .search-results {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.selected-chip span,
+.search-result strong {
+  color: var(--text);
 }
 
 .selected-chip small,
 .search-result span,
 .search-result small,
 .search-empty,
-.search-meta {
+.search-meta,
+.match-rank,
+.super-score span {
   color: var(--text-subtle);
 }
 
 .search-result strong {
   font-size: 0.98rem;
-  color: var(--text);
 }
 
 .search-empty,
@@ -273,44 +290,50 @@ function addPlayerToCompare(playerId) {
   margin: 0;
 }
 
-.breakdown-card {
+.historical-card {
   display: grid;
-  gap: 0.85rem;
+  gap: 1rem;
   padding: 1rem;
-  border-radius: 20px;
+  border-radius: 22px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  background:
+    linear-gradient(180deg, rgba(217, 151, 0, 0.08), transparent 35%),
+    rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.breakdown-head {
+.historical-head {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: center;
+  align-items: start;
 }
 
-.breakdown-head strong {
-  color: var(--text);
-}
-
-.summary-card span {
+.match-rank,
+.super-score span {
+  display: block;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-subtle);
 }
 
-.summary-card strong {
-  font-size: 1.6rem;
+.super-score {
+  display: grid;
+  justify-items: end;
+}
+
+.super-score strong {
+  font-size: 2rem;
+  line-height: 1;
   color: var(--accent-strong);
 }
 
 @media (min-width: 900px) {
-  .card-grid,
-  .summary-grid,
-  .breakdown-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .historical-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

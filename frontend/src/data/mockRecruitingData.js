@@ -349,6 +349,345 @@ export const activityFeed = [
   },
 ]
 
+const historicalComparisonMap = {
+  1: [
+    {
+      historicalId: 'qb-hist-1',
+      name: 'Jordan Reeves',
+      position: 'QB',
+      school: 'Oklahoma State',
+      conference: 'Big 12',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 90,
+        production: 93,
+        context: 84,
+      },
+    },
+    {
+      historicalId: 'qb-hist-2',
+      name: 'Malik James',
+      position: 'QB',
+      school: 'Appalachian State',
+      conference: 'Sun Belt',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 87,
+        production: 85,
+        context: 80,
+      },
+    },
+    {
+      historicalId: 'qb-hist-3',
+      name: 'Connor Hale',
+      position: 'QB',
+      school: 'Kansas State',
+      conference: 'Big 12',
+      lastSeason: 2021,
+      comparisonScores: {
+        physical: 82,
+        production: 88,
+        context: 79,
+      },
+    },
+  ],
+  2: [
+    {
+      historicalId: 'wr-hist-1',
+      name: 'Marcus Hill',
+      position: 'WR',
+      school: 'Georgia',
+      conference: 'SEC',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 89,
+        production: 92,
+        context: 88,
+      },
+    },
+    {
+      historicalId: 'wr-hist-2',
+      name: 'Tyler Owens',
+      position: 'WR',
+      school: 'Michigan State',
+      conference: 'Big Ten',
+      lastSeason: 2018,
+      comparisonScores: {
+        physical: 86,
+        production: 89,
+        context: 83,
+      },
+    },
+    {
+      historicalId: 'wr-hist-3',
+      name: 'DeShawn Brooks',
+      position: 'WR',
+      school: 'Toledo',
+      conference: 'MAC',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 82,
+        production: 84,
+        context: 78,
+      },
+    },
+  ],
+  3: [
+    {
+      historicalId: 'lb-hist-1',
+      name: 'Andre Wallace',
+      position: 'LB',
+      school: 'Wisconsin',
+      conference: 'Big Ten',
+      lastSeason: 2022,
+      comparisonScores: {
+        physical: 84,
+        production: 90,
+        context: 87,
+      },
+    },
+    {
+      historicalId: 'lb-hist-2',
+      name: 'Micah Benton',
+      position: 'LB',
+      school: 'Kentucky',
+      conference: 'SEC',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 82,
+        production: 88,
+        context: 85,
+      },
+    },
+    {
+      historicalId: 'lb-hist-3',
+      name: 'Cole Mercer',
+      position: 'LB',
+      school: 'Iowa',
+      conference: 'Big Ten',
+      lastSeason: 2021,
+      comparisonScores: {
+        physical: 79,
+        production: 85,
+        context: 84,
+      },
+    },
+  ],
+  4: [
+    {
+      historicalId: 'qb-hist-4',
+      name: 'Ethan Wade',
+      position: 'QB',
+      school: 'Wake Forest',
+      conference: 'ACC',
+      lastSeason: 2022,
+      comparisonScores: {
+        physical: 88,
+        production: 84,
+        context: 86,
+      },
+    },
+    {
+      historicalId: 'qb-hist-5',
+      name: 'Jordan Reeves',
+      position: 'QB',
+      school: 'Oklahoma State',
+      conference: 'Big 12',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 86,
+        production: 82,
+        context: 88,
+      },
+    },
+    {
+      historicalId: 'qb-hist-6',
+      name: 'Parker Sloan',
+      position: 'QB',
+      school: 'BYU',
+      conference: 'Big 12',
+      lastSeason: 2020,
+      comparisonScores: {
+        physical: 83,
+        production: 80,
+        context: 84,
+      },
+    },
+  ],
+  5: [
+    {
+      historicalId: 'cb-hist-1',
+      name: 'Kris Vaughn',
+      position: 'CB',
+      school: 'LSU',
+      conference: 'SEC',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 85,
+        production: 88,
+        context: 84,
+      },
+    },
+    {
+      historicalId: 'cb-hist-2',
+      name: 'Darius Cole',
+      position: 'CB',
+      school: 'Michigan',
+      conference: 'Big Ten',
+      lastSeason: 2022,
+      comparisonScores: {
+        physical: 83,
+        production: 86,
+        context: 82,
+      },
+    },
+    {
+      historicalId: 'cb-hist-3',
+      name: 'Tre Holloway',
+      position: 'CB',
+      school: 'Louisville',
+      conference: 'ACC',
+      lastSeason: 2021,
+      comparisonScores: {
+        physical: 80,
+        production: 84,
+        context: 81,
+      },
+    },
+  ],
+  6: [
+    {
+      historicalId: 'te-hist-1',
+      name: 'Logan Cross',
+      position: 'TE',
+      school: 'Utah',
+      conference: 'Pac-12',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 91,
+        production: 83,
+        context: 82,
+      },
+    },
+    {
+      historicalId: 'te-hist-2',
+      name: 'Brady Shelton',
+      position: 'TE',
+      school: 'Notre Dame',
+      conference: 'Independent',
+      lastSeason: 2022,
+      comparisonScores: {
+        physical: 88,
+        production: 80,
+        context: 79,
+      },
+    },
+    {
+      historicalId: 'te-hist-3',
+      name: 'Mason Pike',
+      position: 'TE',
+      school: 'Kansas State',
+      conference: 'Big 12',
+      lastSeason: 2021,
+      comparisonScores: {
+        physical: 84,
+        production: 78,
+        context: 77,
+      },
+    },
+  ],
+  7: [
+    {
+      historicalId: 'edge-hist-1',
+      name: 'Jermaine Pratt',
+      position: 'EDGE',
+      school: 'Penn State',
+      conference: 'Big Ten',
+      lastSeason: 2023,
+      comparisonScores: {
+        physical: 86,
+        production: 82,
+        context: 80,
+      },
+    },
+    {
+      historicalId: 'edge-hist-2',
+      name: 'Quincy Reed',
+      position: 'EDGE',
+      school: 'Ole Miss',
+      conference: 'SEC',
+      lastSeason: 2022,
+      comparisonScores: {
+        physical: 84,
+        production: 79,
+        context: 83,
+      },
+    },
+    {
+      historicalId: 'edge-hist-3',
+      name: 'Damon Graves',
+      position: 'EDGE',
+      school: 'NC State',
+      conference: 'ACC',
+      lastSeason: 2021,
+      comparisonScores: {
+        physical: 82,
+        production: 77,
+        context: 78,
+      },
+    },
+  ],
+}
+
+function averageScores(scores = {}) {
+  const values = Object.values(scores).filter((value) => typeof value === 'number')
+  if (!values.length) {
+    return 0
+  }
+
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+}
+
+const historicalPlayers = Object.values(historicalComparisonMap)
+  .flat()
+  .map((match) => ({
+    id: match.historicalId,
+    isHistorical: true,
+    name: match.name,
+    school: match.school,
+    state: match.conference,
+    city: '',
+    classYear: match.lastSeason,
+    position: match.position,
+    projectedPosition: `Historical ${match.position} Comparable`,
+    type: 'Historical',
+    height: 'N/A',
+    weight: null,
+    fortyTime: 'N/A',
+    gpa: null,
+    rating: averageScores(match.comparisonScores),
+    stars: 0,
+    jersey: 'HIST',
+    archetype: 'Historical Match',
+    summary: `Historical comparable from ${match.school} in the ${match.conference}.`,
+    explanation: `This record captures how closely the historical player matches the selected recruit profile.`,
+    notes: `Most recent recorded season: ${match.lastSeason}. Historical player cards do not include related-athlete suggestions.`,
+    schemeFit: averageScores(match.comparisonScores),
+    comparisonScore: averageScores(match.comparisonScores),
+    confidenceScore: averageScores(match.comparisonScores),
+    breakdown: {
+      physical: match.comparisonScores.physical,
+      production: match.comparisonScores.production,
+      context: match.comparisonScores.context,
+    },
+    stats: {
+      conference: match.conference,
+      lastSeason: match.lastSeason,
+      superScore: averageScores(match.comparisonScores),
+    },
+    topComparables: [],
+  }))
+
 export function getPlayerById(playerId) {
   return players.find((player) => playerIdsMatch(player.id, playerId)) || null
 }
@@ -359,4 +698,21 @@ export function getPlayersByIds(ids = []) {
 
 export function getComparables(player) {
   return getPlayersByIds(player?.topComparables || [])
+}
+
+export function getHistoricalMatches(playerId) {
+  return [...(historicalComparisonMap[playerId] || [])]
+    .map((match) => ({
+      ...match,
+      superScore: averageScores(match.comparisonScores),
+    }))
+    .sort((left, right) => right.superScore - left.superScore)
+}
+
+export function getHistoricalPlayerById(playerId) {
+  return historicalPlayers.find((player) => player.id === playerId) || null
+}
+
+export function getDisplayPlayerById(playerId) {
+  return getPlayerById(playerId) || getHistoricalPlayerById(playerId)
 }

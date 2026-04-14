@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 
 import PlayerCard from '../components/PlayerCard.vue'
 import ScoreBadge from '../components/ScoreBadge.vue'
-import { getComparables, getPlayerById } from '../data/mockRecruitingData'
+import { getComparables, getDisplayPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 import { playerIdsMatch } from '../utils/playerIds'
 
@@ -16,10 +16,23 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const { state, toggleComparePlayer } = useRecruitingStore()
+const { state } = useRecruitingStore()
 
-const player = computed(() => getPlayerById(props.playerId))
-const comparables = computed(() => (player.value ? getComparables(player.value) : []))
+const player = computed(() => getDisplayPlayerById(props.playerId))
+const comparables = computed(() =>
+  player.value && !player.value.isHistorical ? getComparables(player.value) : []
+)
+const playerSubtitle = computed(() => {
+  if (!player.value) {
+    return ''
+  }
+
+  if (player.value.isHistorical) {
+    return `${player.value.projectedPosition} • ${player.value.school} • Last active ${player.value.classYear}`
+  }
+
+  return `${player.value.projectedPosition} • ${player.value.school} • Class of ${player.value.classYear}`
+})
 const playerIndex = computed(() =>
   state.players.findIndex((entry) => playerIdsMatch(entry.id, props.playerId))
 )
@@ -32,10 +45,8 @@ const nextPlayerId = computed(() =>
     : null
 )
 
-function openComparison(comparableId) {
-  toggleComparePlayer(props.playerId)
-  toggleComparePlayer(comparableId)
-  router.push('/compare')
+function openComparison(playerId) {
+  router.push(`/compare?recruitId=${playerId}`)
 }
 
 function openPlayer(playerId) {
@@ -50,7 +61,7 @@ function openPlayer(playerId) {
         <div>
           <p class="eyebrow section-label">Player Card</p>
           <h2>{{ player.name }}</h2>
-          <p>{{ player.projectedPosition }} • {{ player.school }} • Class of {{ player.classYear }}</p>
+          <p>{{ playerSubtitle }}</p>
         </div>
         <button class="ghost-button" type="button" @click="router.push('/players')">Back to board</button>
       </div>
@@ -65,12 +76,6 @@ function openPlayer(playerId) {
           </div>
         </div>
 
-        <div class="score-row">
-          <ScoreBadge label="Comparison" :value="player.comparisonScore" tone="gold" />
-          <ScoreBadge label="Scheme Fit" :value="player.schemeFit" tone="mint" />
-          <ScoreBadge label="Confidence" :value="player.confidenceScore" tone="blue" />
-        </div>
-
         <p class="body-copy">{{ player.explanation }}</p>
 
         <div class="score-row">
@@ -80,7 +85,7 @@ function openPlayer(playerId) {
         </div>
       </section>
 
-      <section class="content-panel surface-panel">
+      <section v-if="!player.isHistorical" class="content-panel surface-panel">
         <div class="section-header">
           <div>
             <p class="eyebrow section-label">Player Navigation</p>
@@ -104,9 +109,9 @@ function openPlayer(playerId) {
         <p class="eyebrow section-label">Vitals + Production</p>
         <div class="detail-grid">
           <div><span>Height</span><strong>{{ player.height }}</strong></div>
-          <div><span>Weight</span><strong>{{ player.weight }} lbs</strong></div>
-          <div><span>40 Time</span><strong>{{ player.fortyTime }}</strong></div>
-          <div><span>GPA</span><strong>{{ player.gpa }}</strong></div>
+          <div><span>Weight</span><strong>{{ player.weight ? `${player.weight} lbs` : 'N/A' }}</strong></div>
+          <div><span>40 Time</span><strong>{{ player.fortyTime || 'N/A' }}</strong></div>
+          <div><span>GPA</span><strong>{{ player.gpa ?? 'N/A' }}</strong></div>
           <div v-for="(value, key) in player.stats" :key="key">
             <span>{{ key.replace(/([A-Z])/g, ' $1') }}</span>
             <strong>{{ value }}</strong>
@@ -119,7 +124,7 @@ function openPlayer(playerId) {
         <p class="body-copy">{{ player.notes }}</p>
       </section>
 
-      <section class="content-panel surface-panel">
+      <section v-if="comparables.length" class="content-panel surface-panel">
         <div class="section-header">
           <div>
             <p class="eyebrow section-label">Top Comparables</p>
@@ -139,7 +144,6 @@ function openPlayer(playerId) {
               <strong>{{ comparable.name }}</strong>
               <p>{{ comparable.projectedPosition }}</p>
             </div>
-            <span>{{ comparable.comparisonScore }}</span>
           </button>
         </div>
       </section>
@@ -235,12 +239,6 @@ function openPlayer(playerId) {
   background: rgba(255, 255, 255, 0.04);
   color: inherit;
   text-align: left;
-}
-
-.compare-row span {
-  font-size: 1.3rem;
-  font-weight: 900;
-  color: #79c8ff;
 }
 
 @media (min-width: 980px) {

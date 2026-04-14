@@ -22,11 +22,14 @@ const props = defineProps({
     type: String,
     default: 'Right',
   },
+  valueDisplay: {
+    type: [String, Number],
+    default: null,
+  },
 })
 
 const total = computed(() => Math.max(props.leftValue + props.rightValue, 1))
 const leftWidth = computed(() => `${(props.leftValue / total.value) * 100}%`)
-const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
 </script>
 
 <template>
@@ -34,14 +37,15 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
     <div v-if="label" class="comparison-title">{{ label }}</div>
 
     <div class="comparison-row">
-      <span class="comparison-side comparison-side-left">{{ leftLabel }} <strong>{{ leftValue }}</strong></span>
+      <span class="comparison-side comparison-side-left">{{ leftLabel }}</span>
 
       <div class="bar-track">
         <span class="bar-fill left-fill" :style="{ width: leftWidth }" />
-        <span class="bar-fill right-fill" :style="{ width: rightWidth }" />
       </div>
 
-      <span class="comparison-side comparison-side-right"><strong>{{ rightValue }}</strong> {{ rightLabel }}</span>
+      <span v-if="valueDisplay !== null || rightLabel" class="comparison-side comparison-side-right">
+        <strong>{{ valueDisplay ?? rightValue }}</strong><template v-if="rightLabel"> {{ rightLabel }}</template>
+      </span>
     </div>
   </div>
 </template>
@@ -54,7 +58,7 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
 
 .comparison-row {
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  grid-template-columns: 7rem minmax(0, 1fr) 3rem;
   gap: 0.75rem;
   align-items: center;
 }
@@ -63,6 +67,14 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
   font-size: 0.85rem;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.comparison-side-left {
+  font-weight: 800;
+}
+
+.comparison-side-right {
+  text-align: right;
 }
 
 .comparison-title {
@@ -75,9 +87,11 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
 }
 
 .bar-track {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem;
+  position: relative;
+  height: 0.7rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .bar-fill {
@@ -87,12 +101,8 @@ const rightWidth = computed(() => `${(props.rightValue / total.value) * 100}%`)
 }
 
 .left-fill {
-  justify-self: end;
   background: linear-gradient(90deg, rgba(217, 151, 0, 0.45), var(--accent));
-}
-
-.right-fill {
-  background: linear-gradient(90deg, var(--brand-cool), rgba(137, 190, 229, 0.45));
+  box-shadow: 0 0 0 1px rgba(217, 151, 0, 0.14) inset;
 }
 
 @media (max-width: 640px) {
