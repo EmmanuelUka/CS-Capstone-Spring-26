@@ -52,6 +52,10 @@ export async function fetchPlayers() {
   return requestJson('/api/recruits')
 }
 
+export async function deletePlayerRecord(playerId) {
+  await mutateJson(`/api/recruits/${playerId}`, 'DELETE')
+}
+
 export async function listShortlists() {
   const data = await requestJson('/api/shortlists')
   return Array.isArray(data) ? data : []
