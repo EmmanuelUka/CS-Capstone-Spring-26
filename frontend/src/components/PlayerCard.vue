@@ -122,12 +122,7 @@ function getSummaryEntries(player, compact) {
 
     <div class="card-hero">
       <div class="hero-copy">
-        <p class="hero-label">{{ player.projectedPosition }}</p>
         <p class="hero-summary">{{ player.summary }}</p>
-      </div>
-      <div class="card-frame">
-        <span class="frame-stars">{{ '★'.repeat(player.stars) }}</span>
-        <span class="frame-jersey">{{ player.jersey }}</span>
       </div>
     </div>
 

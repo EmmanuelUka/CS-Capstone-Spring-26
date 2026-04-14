@@ -1297,6 +1297,87 @@ def get_recent_shortlists():
     ]
     return jsonify(shortlists)
 
+@app.route("/api/create_player", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def create_player():
+    data = request.get_json()
+    print(data)
+    return jsonify({"status": "ok", "player": data})
+
+@app.route("/api/get_last_10_recruits")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_last_10_recruits():
+    
+    players = [
+        {
+            "id": 1,
+            "name": "Evan Brooks",
+            "school": "St. Xavier",
+            "state": "OH",
+            "city": "Cincinnati",
+            "classYear": 2027,
+            "position": "QB",
+
+            "type": "High School",
+            "height": "6'2\"",
+            "weight": 204,
+
+            "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
+
+            "breakdown": {
+            "physical": 82,
+            "production": 94,
+            "context": 87
+            }
+
+        },
+        {
+            "id": 2,
+            "name": "Evan Brooks",
+            "school": "St. Xavier",
+            "state": "OH",
+            "city": "Cincinnati",
+            "classYear": 2027,
+            "position": "QB",
+
+            "type": "High School",
+            "height": "6'2\"",
+            "weight": 204,
+
+            "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
+
+            "breakdown": {
+            "physical": 82,
+            "production": 94,
+            "context": 87
+            }
+
+        },
+        {
+            "id": 3,
+            "name": "Evan Brooks",
+            "school": "St. Xavier",
+            "state": "OH",
+            "city": "Cincinnati",
+            "classYear": 2027,
+            "position": "QB",
+
+            "type": "High School",
+            "height": "6'2\"",
+            "weight": 204,
+
+            "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
+
+            "breakdown": {
+            "physical": 82,
+            "production": 94,
+            "context": 87
+            }
+
+        },
+    ]
+    return jsonify(players)
+
 # =========================================================
 # Local Dev Entrypoint
 # =========================================================
