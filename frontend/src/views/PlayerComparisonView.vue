@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import ComparisonBar from '../components/ComparisonBar.vue'
 import PlayerCard from '../components/PlayerCard.vue'
+import ScoreBadge from '../components/ScoreBadge.vue'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 import { playerIdListIncludes } from '../utils/playerIds'
 
@@ -11,11 +11,10 @@ const router = useRouter()
 const { state, comparePlayers, toggleComparePlayer } = useRecruitingStore()
 const searchQuery = ref('')
 
-const categories = [
-  ['Physical', 'physical'],
-  ['Athletic', 'athletic'],
-  ['Production', 'production'],
-  ['Context', 'context'],
+const breakdownMetrics = [
+  ['Physical', 'physical', 'gold'],
+  ['Production', 'production', 'mint'],
+  ['Context', 'context', 'blue'],
 ]
 
 const hasEnoughPlayers = computed(() => comparePlayers.value.length >= 2)
@@ -143,23 +142,25 @@ function addPlayerToCompare(playerId) {
     <section v-if="hasEnoughPlayers" class="compare-panel surface-panel">
       <div class="section-head">
         <p class="eyebrow section-label">Category Breakdown</p>
-        <h3>Mock side-by-side bars</h3>
+        <h3>Score breakdown</h3>
       </div>
 
-      <div v-for="[label, key] in categories" :key="key" class="category-block">
-        <div class="category-heading">
-          <span class="category-label">{{ label }}</span>
-        </div>
+      <div class="breakdown-grid">
+        <div v-for="player in comparePlayers" :key="player.id" class="breakdown-card">
+          <div class="breakdown-head">
+            <span class="section-label">{{ player.name }}</span>
+            <strong>{{ player.position }}</strong>
+          </div>
 
-        <div class="category-bars">
-          <ComparisonBar
-            v-for="player in comparePlayers"
-            :key="`${player.id}-${key}`"
-            :left-value="player.breakdown[key]"
-            :right-value="100 - player.breakdown[key]"
-            :left-label="player.name.split(' ')[0]"
-            right-label="Remaining"
-          />
+          <div class="breakdown-scores">
+            <ScoreBadge
+              v-for="[label, key, tone] in breakdownMetrics"
+              :key="`${player.id}-${key}`"
+              :label="label"
+              :value="player.breakdown[key]"
+              :tone="tone"
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -201,7 +202,8 @@ function addPlayerToCompare(playerId) {
 
 .card-grid,
 .summary-grid,
-.category-bars {
+.breakdown-grid,
+.breakdown-scores {
   display: grid;
   gap: 0.85rem;
 }
@@ -271,27 +273,24 @@ function addPlayerToCompare(playerId) {
   margin: 0;
 }
 
-.category-block {
+.breakdown-card {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.category-heading {
+.breakdown-head {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
 }
 
-.category-label {
-  display: block;
-  margin: 0;
-  padding: 0;
-  line-height: 1;
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-  text-align: center;
+.breakdown-head strong {
+  color: var(--text);
 }
 
 .summary-card span {
@@ -309,7 +308,8 @@ function addPlayerToCompare(playerId) {
 
 @media (min-width: 900px) {
   .card-grid,
-  .summary-grid {
+  .summary-grid,
+  .breakdown-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

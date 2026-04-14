@@ -7,12 +7,12 @@ import PlayerCard from '../components/PlayerCard.vue'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
 const router = useRouter()
-const { state, filteredPlayers, setFilters, toggleComparePlayer } = useRecruitingStore()
+const { state, filteredPlayers, setFilters, toggleComparePlayer, rosterPositions } = useRecruitingStore()
 
 const filterOptions = computed(() => ({
-  positions: ['All', ...new Set(state.players.map((player) => player.position))],
+  positions: ['All', ...rosterPositions],
   states: ['All', ...new Set(state.players.map((player) => player.state))],
-  statuses: ['All', ...new Set(state.players.map((player) => player.evaluationStatus))],
+  types: ['All', ...new Set(state.players.map((player) => player.type))],
 }))
 
 function updateFilters(nextFilters) {
@@ -39,12 +39,20 @@ function comparePlayer(playerId) {
       </p>
     </div>
 
-    <FilterPanel
-      class="sidebar"
-      :filters="state.filters"
-      :options="filterOptions"
-      @update:filters="updateFilters"
-    />
+    <aside class="sidebar sidebar-stack">
+      <FilterPanel
+        :filters="state.filters"
+        :options="filterOptions"
+        @update:filters="updateFilters"
+      />
+
+      <section class="add-player-panel surface-panel">
+        <p class="eyebrow section-label">Board Tools</p>
+        <h3>Add a new player</h3>
+        <p>Open the intake page to enter a new prospect profile.</p>
+        <button class="primary-button" type="button" @click="router.push('/players/add')">Add player</button>
+      </section>
+    </aside>
 
     <section class="results-panel surface-panel">
       <div class="results-header">
@@ -79,12 +87,20 @@ function comparePlayer(playerId) {
   gap: 1rem;
 }
 
+.sidebar-stack {
+  display: grid;
+  gap: 1rem;
+  align-self: start;
+}
+
 .intro-panel h2,
-.results-header h3 {
+.results-header h3,
+.add-player-panel h3 {
   margin: 0.3rem 0 0;
 }
 
-.intro-panel p:last-child {
+.intro-panel p:last-child,
+.add-player-panel > p:last-child {
   margin: 0;
   color: rgba(242, 236, 227, 0.72);
 }

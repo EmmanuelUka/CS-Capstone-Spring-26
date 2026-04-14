@@ -5,6 +5,7 @@ import {
   players,
   shortlists as defaultShortlists,
 } from '../data/mockRecruitingData'
+import { EVAL_POSITIONS } from '../data/positionStats'
 import { normalizePlayerId, playerIdListIncludes, playerIdsMatch } from '../utils/playerIds'
 
 const STORAGE_KEY = 'hashmark-recruiting-prototype'
@@ -13,7 +14,7 @@ const defaultFilters = {
   query: '',
   position: 'All',
   state: 'All',
-  evaluationStatus: 'All',
+  type: 'All',
   ratingFloor: 0,
 }
 
@@ -40,7 +41,7 @@ const defaultArchetypes = [
   },
 ]
 
-const rosterPositions = [...new Set(players.map((player) => player.position))].sort()
+const rosterPositions = [...new Set([...EVAL_POSITIONS, ...players.map((player) => player.position)])].sort()
 
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -118,12 +119,17 @@ function normalizeShortlist(list) {
 }
 
 const persisted = loadPersistedState()
+const persistedFilters = persisted.filters || {}
+const normalizedPersistedFilters = {
+  ...persistedFilters,
+  type: persistedFilters.type || persistedFilters.evaluationStatus || 'All',
+}
 
 const state = reactive({
   players,
   filters: {
     ...defaultFilters,
-    ...(persisted.filters || {}),
+    ...normalizedPersistedFilters,
   },
   shortlists: (persisted.shortlists || deepClone(defaultShortlists)).map(normalizeShortlist),
   archetypes: persisted.archetypes || deepClone(defaultArchetypes),
@@ -290,12 +296,10 @@ const filteredPlayers = computed(() =>
     const matchesPosition =
       state.filters.position === 'All' || player.position === state.filters.position
     const matchesState = state.filters.state === 'All' || player.state === state.filters.state
-    const matchesStatus =
-      state.filters.evaluationStatus === 'All' ||
-      player.evaluationStatus === state.filters.evaluationStatus
+    const matchesType = state.filters.type === 'All' || player.type === state.filters.type
     const matchesRating = player.rating >= state.filters.ratingFloor
 
-    return matchesQuery && matchesPosition && matchesState && matchesStatus && matchesRating
+    return matchesQuery && matchesPosition && matchesState && matchesType && matchesRating
   })
 )
 

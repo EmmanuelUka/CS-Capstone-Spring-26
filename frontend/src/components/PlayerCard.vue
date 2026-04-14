@@ -95,9 +95,9 @@ function getSummaryEntries(player, compact) {
       value: bestStat?.value ?? 'N/A',
     },
     {
-      key: 'status',
-      label: 'Status',
-      value: player?.evaluationStatus || 'N/A',
+      key: 'type',
+      label: 'Type',
+      value: player?.type || 'N/A',
     },
   ]
 
@@ -143,9 +143,9 @@ function getSummaryEntries(player, compact) {
     </div>
 
     <div class="score-row">
-      <ScoreBadge label="Comp" :value="player.comparisonScore" tone="gold" />
-      <ScoreBadge label="Fit" :value="player.schemeFit" tone="mint" />
-      <ScoreBadge label="Trust" :value="player.confidenceScore" tone="blue" />
+      <ScoreBadge label="Physical" :value="player.breakdown?.physical" tone="gold" />
+      <ScoreBadge label="Production" :value="player.breakdown?.production" tone="mint" />
+      <ScoreBadge label="Context" :value="player.breakdown?.context" tone="blue" />
     </div>
 
     <div class="card-actions">

@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 
 import DashboardView from '../views/DashboardView.vue'
 import AccountView from '../views/AccountView.vue'
+import AddPlayerView from '../views/AddPlayerView.vue'
 import PlayerCardView from '../views/PlayerCardView.vue'
 import PlayerComparisonView from '../views/PlayerComparisonView.vue'
 import PlayerListView from '../views/PlayerListView.vue'
@@ -14,6 +15,7 @@ const routes = [
   { path: '/account', name: 'account', component: AccountView },
   { path: '/schemes', name: 'schemes', component: SchemeCreatorView },
   { path: '/players', name: 'players', component: PlayerListView },
+  { path: '/players/add', name: 'player-add', component: AddPlayerView },
   {
     path: '/players/:playerId',
     name: 'player-card',
