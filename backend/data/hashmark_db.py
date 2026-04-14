@@ -192,7 +192,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS schemes (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            name    TEXT
+            name    TEXT,
+            color   TEXT
         );
 
         -- ----------------------------------------------------------------
@@ -246,6 +247,7 @@ def init_db():
     # column does not yet exist; we catch the OperationalError for safety.
     # ------------------------------------------------------------------
     _migrate_player_evaluations()
+    _migrate_schemes()
 
 
 def _migrate_player_evaluations():
@@ -272,6 +274,23 @@ def _migrate_player_evaluations():
                     "INSERT INTO log_activity (activity_name, activity_notes) VALUES (?, ?)",
                     ("migrate_schema", f"Added column player_evaluations.{col_name}"),
                 )
+
+
+def _migrate_schemes():
+    """Add color to schemes if it is not already present."""
+    with get_conn() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(schemes)"
+            ).fetchall()
+        }
+        if "color" not in existing:
+            conn.execute("ALTER TABLE schemes ADD COLUMN color TEXT")
+            conn.execute(
+                "INSERT INTO log_activity (activity_name, activity_notes) VALUES (?, ?)",
+                ("migrate_schema", "Added column schemes.color"),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -634,6 +653,30 @@ def update_player(
 
 def delete_player(player_id: int):
     with get_conn() as conn:
+        conn.execute(
+            """
+            DELETE FROM scheme_assignments
+            WHERE player_id = ?
+            """,
+            (player_id,),
+        )
+        conn.execute(
+            """
+            DELETE FROM player_comparisons
+            WHERE evaluation_id IN (
+                SELECT id FROM player_evaluations WHERE player_id = ?
+            )
+            """,
+            (player_id,),
+        )
+        conn.execute(
+            "DELETE FROM player_stats WHERE player_id = ?",
+            (player_id,),
+        )
+        conn.execute(
+            "DELETE FROM player_evaluations WHERE player_id = ?",
+            (player_id,),
+        )
         conn.execute("DELETE FROM players WHERE id = ?", (player_id,))
     log("delete_player", f"id={player_id}")
 
@@ -948,18 +991,31 @@ def get_all_comparisons_df() -> pd.DataFrame:
 # Schemes (shortlists)
 # ---------------------------------------------------------------------------
 
-def insert_scheme(user_id: int, name: str) -> int:
+def insert_scheme(user_id: int, name: str, color: str = None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO schemes (user_id, name) VALUES (?, ?)",
-            (user_id, name),
+            "INSERT INTO schemes (user_id, name, color) VALUES (?, ?, ?)",
+            (user_id, name, color),
         )
-        _log_conn(conn, "insert_scheme", f"name={name}, user_id={user_id}")
+        _log_conn(conn, "insert_scheme", f"name={name}, user_id={user_id}, color={color}")
         return cur.lastrowid
 
 
 def delete_scheme(scheme_id: int):
     with get_conn() as conn:
+        conn.execute(
+            """
+            DELETE FROM scheme_assignments
+            WHERE scheme_position_id IN (
+                SELECT id FROM scheme_positions WHERE scheme_id = ?
+            )
+            """,
+            (scheme_id,),
+        )
+        conn.execute(
+            "DELETE FROM scheme_positions WHERE scheme_id = ?",
+            (scheme_id,),
+        )
         conn.execute("DELETE FROM schemes WHERE id = ?", (scheme_id,))
     log("delete_scheme", f"id={scheme_id}")
 

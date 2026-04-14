@@ -3,10 +3,13 @@ import hmac
 import logging
 import os
 import secrets
+import sys
 import uuid
+from dataclasses import asdict
 from datetime import timedelta
 from functools import wraps
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 import msal
@@ -20,13 +23,17 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "data"))
+
+import eval_utility_flask as eval_api
+import hashmark_db as recruiting_db
 from db import (
     attach_subject_to_user,
     delete_user,
     get_user_by_email,
     get_user_by_subject,
     get_user_list,
-    init_db,
+    init_db as init_auth_db,
     sync_super_admins,
     update_user_role,
     upsert_user,
@@ -468,7 +475,8 @@ def _build_msal_app():
 # Database Startup
 # =========================================================
 
-init_db()  # Create tables if needed.
+init_auth_db()  # Create auth tables if needed.
+recruiting_db.init_db()  # Create recruiting tables if needed.
 
 # Sync env-defined super admins into the database.
 sync_super_admins(SUPER_ADMIN_EMAILS, enforce=ENFORCE_SUPER_ADMIN_LIST)
@@ -1533,7 +1541,11 @@ EXAMPLE_HISTORICAL_MATCHES = {
 
 
 def _average_score(scores):
-    values = [value for value in scores.values() if isinstance(value, (int, float))]
+    if hasattr(scores, "values"):
+        iterable = scores.values()
+    else:
+        iterable = scores or []
+    values = [value for value in iterable if isinstance(value, (int, float))]
     if not values:
         return 0
     return round(sum(values) / len(values))
@@ -1588,20 +1600,23 @@ def _build_historical_player(match):
 
 
 def _get_example_player(player_id):
-    normalized_player_id = _normalize_example_player_id(player_id)
-    for player in EXAMPLE_RECRUITING_PLAYERS:
-        if player.get("id") == normalized_player_id:
-            return player
-    return None
+    normalized_player_id = _coerce_int(player_id)
+    record = _get_db_player(normalized_player_id)
+    if not record or not record.get("is_recruit"):
+        return None
+    stats_map = _build_player_stats_map([normalized_player_id])
+    metric_map = _build_player_metric_map([normalized_player_id])
+    return _build_player_payload(record, stats_map=stats_map, metric_map=metric_map)
 
 
 def _get_historical_player(player_id):
-    normalized_player_id = _normalize_example_player_id(player_id)
-    for matches in EXAMPLE_HISTORICAL_MATCHES.values():
-        for match in matches:
-            if match.get("historicalId") == normalized_player_id:
-                return _build_historical_player(match)
-    return None
+    normalized_player_id = _coerce_int(player_id)
+    record = _get_db_player(normalized_player_id)
+    if not record or record.get("is_recruit"):
+        return None
+    stats_map = _build_player_stats_map([normalized_player_id])
+    metric_map = _build_player_metric_map([normalized_player_id])
+    return _build_player_payload(record, stats_map=stats_map, metric_map=metric_map)
 
 
 def _get_example_display_player(player_id):
@@ -1609,96 +1624,443 @@ def _get_example_display_player(player_id):
 
 
 def _get_example_comparables(player):
-    comparable_ids = player.get("topComparables", []) if player else []
-    comparables = []
-    for comparable_id in comparable_ids:
-        comparable = _get_example_player(comparable_id)
-        if comparable:
-            comparables.append(comparable)
-    return comparables
+    return []
 
 
 def _get_example_historical_matches(player_id):
-    normalized_player_id = _normalize_example_player_id(player_id)
-    matches = EXAMPLE_HISTORICAL_MATCHES.get(normalized_player_id, [])
-    return [
-        {**match, "superScore": _average_score(match.get("comparisonScores", {}))}
-        for match in sorted(
-            matches,
-            key=lambda match: _average_score(match.get("comparisonScores", {})),
-            reverse=True,
-        )
-    ]
+    normalized_player_id = _coerce_int(player_id)
+    return _load_historical_matches(normalized_player_id)
 
 
 def _filter_example_recruiting_players(args):
+    limit = args.get("limit", type=int)
+    players = _build_db_recruiting_players(args=args, order_by="p.name ASC", limit=limit)
+    rating_floor = args.get("ratingFloor", type=float)
+    if rating_floor is None:
+        return players
+    return [
+        player for player in players
+        if float(player.get("rating") or 0) >= rating_floor
+    ]
+
+
+def _build_example_recruiting_payload():
+    players = _build_db_recruiting_players(order_by="p.id DESC")
+    transfers = sum(1 for player in players if player.get("type") == "Transfer")
+    ratings = [
+        player.get("rating")
+        for player in players
+        if isinstance(player.get("rating"), (int, float))
+    ]
+
+    return {
+        "dashboard": {
+            "total_players": len(players),
+            "transfers": transfers,
+            "high_school": len(players) - transfers,
+            "avg_rating": round(sum(ratings) / len(ratings)) if ratings else 0,
+        },
+        "players": players,
+        "recentPlayers": players[:3],
+        "lastTenRecruits": players[:10],
+        "shortlists": _load_shortlists(limit=3),
+        "activityFeed": [],
+        "historicalMatches": {},
+    }
+
+
+_RECRUIT_TYPE_LABELS = {
+    "high_school": "High School",
+    "college": "College",
+    "transfer": "Transfer",
+}
+_RECRUIT_TYPE_DB_VALUES = {
+    "high school": "high_school",
+    "high_school": "high_school",
+    "college": "college",
+    "transfer": "transfer",
+}
+_DEFAULT_SHORTLIST_COLOR = "#ffb75e"
+
+
+def _coerce_int(value):
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def _df_records(df):
+    if df is None or df.empty:
+        return []
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+def _format_height(height_inches):
+    if height_inches is None:
+        return "N/A"
+    try:
+        total_inches = round(float(height_inches))
+    except (TypeError, ValueError):
+        return "N/A"
+    feet = total_inches // 12
+    inches = total_inches % 12
+    return f"{feet}'{inches}\""
+
+
+def _parse_height_inches(height_value):
+    if height_value is None:
+        return None
+    if isinstance(height_value, (int, float)):
+        return float(height_value)
+    raw = str(height_value).strip()
+    if not raw:
+        return None
+    if "'" in raw:
+        feet_part, inches_part = raw.split("'", 1)
+        inches_part = inches_part.replace('"', "").strip() or "0"
+        try:
+            return float(int(feet_part.strip()) * 12 + int(inches_part))
+        except ValueError:
+            return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _score_to_percent(value):
+    if value is None:
+        return 0
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if numeric <= 1:
+        numeric *= 100
+    return round(numeric)
+
+
+def _player_type_label(recruit_type, is_historical=False):
+    if is_historical:
+        return "Historical"
+    return _RECRUIT_TYPE_LABELS.get((recruit_type or "").strip().lower(), "Recruit")
+
+
+def _player_type_db_value(player_type):
+    return _RECRUIT_TYPE_DB_VALUES.get((player_type or "").strip().lower())
+
+
+def _query_players(is_recruit, args=None, order_by="p.name ASC", limit=None):
+    args = args or {}
     query = (args.get("query") or args.get("q") or "").strip().lower()
     position = (args.get("position") or "All").strip()
     state = (args.get("state") or "All").strip()
     player_type = (args.get("type") or "All").strip()
-    rating_floor = args.get("ratingFloor", type=float)
-    exclude_id = args.get("excludeId")
-    limit = args.get("limit", type=int)
+    exclude_id = _coerce_int(args.get("excludeId"))
 
-    filtered_players = []
-    normalized_exclude_id = _normalize_example_player_id(exclude_id) if exclude_id else None
+    sql = """
+        SELECT
+            p.id,
+            p.name,
+            p.team_name,
+            p.is_recruit,
+            pos.name AS position,
+            p.height,
+            p.weight,
+            p.school_name,
+            p.state_code,
+            p.recruit_type,
+            p.transfer_conference,
+            p.play_year,
+            p.notes
+        FROM players p
+        LEFT JOIN positions pos ON pos.id = p.position_id
+        WHERE p.is_recruit = ?
+    """
+    params = [1 if is_recruit else 0]
 
-    for player in EXAMPLE_RECRUITING_PLAYERS:
-        if normalized_exclude_id is not None and player.get("id") == normalized_exclude_id:
-            continue
+    if exclude_id is not None:
+        sql += " AND p.id <> ?"
+        params.append(exclude_id)
+    if query:
+        sql += """
+            AND LOWER(
+                COALESCE(p.name, '') || ' ' ||
+                COALESCE(pos.name, '') || ' ' ||
+                COALESCE(p.school_name, '') || ' ' ||
+                COALESCE(p.state_code, '')
+            ) LIKE ?
+        """
+        params.append(f"%{query}%")
+    if position != "All":
+        sql += " AND pos.name = ?"
+        params.append(position)
+    if state != "All":
+        sql += " AND p.state_code = ?"
+        params.append(state)
+    if player_type != "All":
+        player_type_db = _player_type_db_value(player_type)
+        if player_type_db:
+            sql += " AND p.recruit_type = ?"
+            params.append(player_type_db)
 
-        if query:
-            haystack = " ".join(
-                str(player.get(field, "")) for field in ("name", "position", "school", "city", "state")
-            ).lower()
-            if query not in haystack:
-                continue
+    sql += f" ORDER BY {order_by}"
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
 
-        if position != "All" and player.get("position") != position:
-            continue
-
-        if state != "All" and player.get("state") != state:
-            continue
-
-        if player_type != "All" and player.get("type") != player_type:
-            continue
-
-        if rating_floor is not None and float(player.get("rating") or 0) < rating_floor:
-            continue
-
-        filtered_players.append(player)
-
-    if limit is not None and limit >= 0:
-        filtered_players = filtered_players[:limit]
-
-    return filtered_players
+    return _df_records(recruiting_db.custom_query_df(sql, tuple(params)))
 
 
-def _build_example_recruiting_payload():
-    total_players = len(EXAMPLE_RECRUITING_PLAYERS)
-    transfers = sum(1 for player in EXAMPLE_RECRUITING_PLAYERS if player.get("type") == "Transfer")
-    ratings = [player.get("rating") for player in EXAMPLE_RECRUITING_PLAYERS if isinstance(player.get("rating"), (int, float))]
+def _build_player_stats_map(player_ids):
+    valid_ids = [player_id for player_id in player_ids if player_id is not None]
+    if not valid_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in valid_ids)
+    df = recruiting_db.custom_query_df(
+        f"""
+        SELECT ps.player_id, s.name AS stat_name, ps.value
+        FROM player_stats ps
+        JOIN stats s ON s.id = ps.stat_id
+        WHERE ps.player_id IN ({placeholders})
+        ORDER BY ps.player_id, s.name
+        """,
+        tuple(valid_ids),
+    )
+
+    stats_map = {}
+    for record in _df_records(df):
+        stats_map.setdefault(record["player_id"], {})[record["stat_name"]] = record["value"]
+    return stats_map
+
+
+def _build_player_metric_map(player_ids):
+    valid_ids = [player_id for player_id in player_ids if player_id is not None]
+    if not valid_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in valid_ids)
+    df = recruiting_db.custom_query_df(
+        f"""
+        SELECT
+            p.id AS player_id,
+            pe.confidence,
+            pe.physical_score AS eval_physical_score,
+            pe.production_score AS eval_production_score,
+            pe.context_score AS eval_context_score,
+            pc.final_score,
+            pc.physical_score AS comp_physical_score,
+            pc.production_score AS comp_production_score,
+            pc.context_score AS comp_context_score
+        FROM players p
+        LEFT JOIN player_evaluations pe ON pe.id = p.evaluation_id
+        LEFT JOIN player_comparisons pc ON pc.evaluation_id = p.evaluation_id
+        WHERE p.id IN ({placeholders})
+        """,
+        tuple(valid_ids),
+    )
+
+    metric_map = {}
+    for record in _df_records(df):
+        metric_map[record["player_id"]] = record
+    return metric_map
+
+
+def _build_player_payload(record, stats_map=None, metric_map=None):
+    stats_map = stats_map or {}
+    metric_map = metric_map or {}
+    player_id = record["id"]
+    metrics = metric_map.get(player_id, {})
+    is_historical = not bool(record.get("is_recruit", 1))
+
+    physical = _score_to_percent(
+        metrics.get("comp_physical_score") or metrics.get("eval_physical_score")
+    )
+    production = _score_to_percent(
+        metrics.get("comp_production_score") or metrics.get("eval_production_score")
+    )
+    context = _score_to_percent(
+        metrics.get("comp_context_score") or metrics.get("eval_context_score")
+    )
+    confidence = _score_to_percent(metrics.get("confidence"))
+    rating = _score_to_percent(metrics.get("final_score"))
+    if not rating:
+        rating = _average_score([physical, production, context])
+
+    position = record.get("position") or ""
+    school_name = record.get("school_name") or record.get("team_name") or ""
 
     return {
-        "dashboard": {
-            "total_players": total_players,
-            "transfers": transfers,
-            "high_school": total_players - transfers,
-            "avg_rating": round(sum(ratings) / len(ratings)) if ratings else 0,
+        "id": player_id,
+        "isHistorical": is_historical,
+        "name": record.get("name") or "",
+        "school": school_name,
+        "state": record.get("state_code") or "",
+        "city": "",
+        "classYear": record.get("play_year"),
+        "position": position,
+        "projectedPosition": position or "Prospect",
+        "type": _player_type_label(record.get("recruit_type"), is_historical=is_historical),
+        "height": _format_height(record.get("height")),
+        "weight": record.get("weight"),
+        "fortyTime": "N/A",
+        "gpa": None,
+        "rating": rating,
+        "stars": 0,
+        "jersey": "N/A",
+        "archetype": "",
+        "summary": record.get("notes") or f"{position or 'Player'} profile from the recruiting database.",
+        "explanation": record.get("notes") or "Stored player record from the recruiting database.",
+        "notes": record.get("notes") or "",
+        "schemeFit": rating,
+        "comparisonScore": rating,
+        "confidenceScore": confidence or rating,
+        "breakdown": {
+            "physical": physical,
+            "production": production,
+            "context": context,
         },
-        "players": EXAMPLE_RECRUITING_PLAYERS,
-        "recentPlayers": EXAMPLE_RECRUITING_PLAYERS[:3],
-        "lastTenRecruits": EXAMPLE_RECRUITING_PLAYERS[:10],
-        "shortlists": EXAMPLE_SHORTLISTS,
-        "activityFeed": EXAMPLE_ACTIVITY_FEED,
-        "historicalMatches": {
-            str(player_id): [
-                {**match, "superScore": _average_score(match.get("comparisonScores", {}))}
-                for match in matches
-            ]
-            for player_id, matches in EXAMPLE_HISTORICAL_MATCHES.items()
-        },
+        "stats": stats_map.get(player_id, {}),
+        "topComparables": [],
     }
+
+
+def _build_db_recruiting_players(args=None, order_by="p.name ASC", limit=None):
+    records = _query_players(True, args=args, order_by=order_by, limit=limit)
+    player_ids = [record["id"] for record in records]
+    stats_map = _build_player_stats_map(player_ids)
+    metric_map = _build_player_metric_map(player_ids)
+    return [
+        _build_player_payload(record, stats_map=stats_map, metric_map=metric_map)
+        for record in records
+    ]
+
+
+def _get_db_player(player_id):
+    if player_id is None:
+        return None
+    records = _query_players(True) + _query_players(False)
+    for record in records:
+        if record["id"] == player_id:
+            return record
+    return None
+
+
+def _load_shortlists(limit=None):
+    records = _df_records(
+        recruiting_db.custom_query_df(
+            """
+            SELECT
+                s.id AS shortlist_id,
+                s.name,
+                s.color,
+                sp.id AS slot_id,
+                sp.slot_number,
+                pos.name AS position,
+                sa.player_id
+            FROM schemes s
+            LEFT JOIN scheme_positions sp ON sp.scheme_id = s.id
+            LEFT JOIN positions pos ON pos.id = sp.position_id
+            LEFT JOIN scheme_assignments sa ON sa.scheme_position_id = sp.id
+            ORDER BY s.id DESC, sp.slot_number ASC
+            """
+        )
+    )
+
+    shortlists = []
+    index = {}
+    for record in records:
+        shortlist_id = record["shortlist_id"]
+        if shortlist_id not in index:
+            payload = {
+                "id": shortlist_id,
+                "name": record.get("name") or "Untitled Group",
+                "color": record.get("color") or _DEFAULT_SHORTLIST_COLOR,
+                "slots": [],
+            }
+            index[shortlist_id] = payload
+            shortlists.append(payload)
+
+        if record.get("slot_id") is not None:
+            index[shortlist_id]["slots"].append(
+                {
+                    "id": record["slot_id"],
+                    "position": record.get("position"),
+                    "playerId": record.get("player_id"),
+                }
+            )
+
+    if limit is not None:
+        shortlists = shortlists[:limit]
+    return shortlists
+
+
+def _load_archetypes():
+    archetypes = []
+    for record in _df_records(recruiting_db.get_archetypes_df()):
+        minimums = []
+        if record.get("stat_rule_stat") and record.get("stat_rule_min") is not None:
+            minimums.append(
+                {
+                    "statKey": record["stat_rule_stat"],
+                    "minValue": record["stat_rule_min"],
+                }
+            )
+        archetypes.append(
+            {
+                "id": record["id"],
+                "name": record["title"],
+                "position": record.get("position"),
+                "notes": record.get("notes") or "",
+                "minimums": minimums,
+            }
+        )
+    return archetypes
+
+
+def _load_historical_matches(player_id):
+    recruit = _get_db_player(player_id)
+    if not recruit or not recruit.get("is_recruit"):
+        return []
+
+    historical_records = _query_players(
+        False,
+        args={"position": recruit.get("position") or "All"},
+        order_by="p.play_year DESC, p.name ASC",
+        limit=8,
+    )
+    metric_map = _build_player_metric_map([record["id"] for record in historical_records])
+    matches = []
+    for record in historical_records:
+        metrics = metric_map.get(record["id"], {})
+        comparison_scores = {
+            "physical": _score_to_percent(
+                metrics.get("comp_physical_score") or metrics.get("eval_physical_score")
+            ),
+            "production": _score_to_percent(
+                metrics.get("comp_production_score") or metrics.get("eval_production_score")
+            ),
+            "context": _score_to_percent(
+                metrics.get("comp_context_score") or metrics.get("eval_context_score")
+            ),
+        }
+        matches.append(
+            {
+                "historicalId": record["id"],
+                "name": record.get("name") or "",
+                "position": record.get("position") or "",
+                "school": record.get("school_name") or record.get("team_name") or "",
+                "conference": record.get("transfer_conference") or record.get("team_name") or "",
+                "lastSeason": record.get("play_year"),
+                "comparisonScores": comparison_scores,
+                "superScore": _average_score(comparison_scores.values()),
+            }
+        )
+    matches.sort(key=lambda match: match["superScore"], reverse=True)
+    return matches
 
 
 @app.route("/api/example_recruiting_data")
@@ -1711,12 +2073,13 @@ def get_example_recruiting_data():
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_recruits():
     players = _filter_example_recruiting_players(request.args)
+    all_players = _build_db_recruiting_players(order_by="p.name ASC")
     return jsonify(
         {
             "players": players,
-            "positions": sorted({player.get("position") for player in EXAMPLE_RECRUITING_PLAYERS if player.get("position")}),
-            "states": sorted({player.get("state") for player in EXAMPLE_RECRUITING_PLAYERS if player.get("state")}),
-            "types": sorted({player.get("type") for player in EXAMPLE_RECRUITING_PLAYERS if player.get("type")}),
+            "positions": sorted({player.get("position") for player in all_players if player.get("position")}),
+            "states": sorted({player.get("state") for player in all_players if player.get("state")}),
+            "types": sorted({player.get("type") for player in all_players if player.get("type")}),
             "total": len(players),
         }
     )
@@ -1725,19 +2088,21 @@ def get_recruits():
 @app.route("/api/recruits/<player_id>")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_recruit(player_id):
-    player = _get_example_display_player(player_id)
+    normalized_player_id = _coerce_int(player_id)
+    player = _get_example_display_player(normalized_player_id)
     if not player:
         return jsonify({"error": "player_not_found"}), 404
 
     previous_player_id = None
     next_player_id = None
     if not player.get("isHistorical"):
-        for index, recruit in enumerate(EXAMPLE_RECRUITING_PLAYERS):
+        recruits = _build_db_recruiting_players(order_by="p.name ASC")
+        for index, recruit in enumerate(recruits):
             if recruit.get("id") == player.get("id"):
-                previous_player_id = EXAMPLE_RECRUITING_PLAYERS[index - 1]["id"] if index > 0 else None
+                previous_player_id = recruits[index - 1]["id"] if index > 0 else None
                 next_player_id = (
-                    EXAMPLE_RECRUITING_PLAYERS[index + 1]["id"]
-                    if index < len(EXAMPLE_RECRUITING_PLAYERS) - 1
+                    recruits[index + 1]["id"]
+                    if index < len(recruits) - 1
                     else None
                 )
                 break
@@ -1750,6 +2115,18 @@ def get_recruit(player_id):
             "nextPlayerId": next_player_id,
         }
     )
+
+
+@app.route("/api/recruits/<player_id>", methods=["DELETE"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def delete_recruit(player_id):
+    normalized_player_id = _coerce_int(player_id)
+    player = _get_db_player(normalized_player_id)
+    if not player:
+        return jsonify({"error": "player_not_found"}), 404
+
+    recruiting_db.delete_player(normalized_player_id)
+    return jsonify({"ok": True, "playerId": normalized_player_id})
 
 
 @app.route("/api/recruits/<player_id>/historical_matches")
@@ -1770,102 +2147,219 @@ def get_top_3_most_recent_recruits():
 @app.route("/api/recent_shortlists")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_recent_shortlists():
-    return jsonify(_build_example_recruiting_payload()["shortlists"])
+    return jsonify(_load_shortlists(limit=3))
 
 @app.route("/api/shortlists")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_shortlists():
-    return jsonify(EXAMPLE_SHORTLISTS)
+    return jsonify(_load_shortlists())
 
 @app.route("/api/shortlists", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def create_shortlist():
     data = request.get_json() or {}
-    print("create_shortlist payload:", data)
-    return jsonify({
-        "status": "ok",
-        "shortlist": {
-            "id": data.get("id") or f"shortlist-{uuid.uuid4().hex[:8]}",
-            "name": data.get("name") or "Untitled Group",
-            "color": data.get("color") or "#ffb75e",
-            "slots": data.get("slots") or [],
-        },
-    })
+    name = (data.get("name") or "Untitled Group").strip() or "Untitled Group"
+    color = (data.get("color") or _DEFAULT_SHORTLIST_COLOR).strip() or _DEFAULT_SHORTLIST_COLOR
+    shortlist_id = recruiting_db.insert_scheme(user_id=None, name=name, color=color)
+
+    for index, slot in enumerate(data.get("slots") or [], start=1):
+        position = (slot.get("position") or "").strip()
+        if not position:
+            continue
+        position_id = recruiting_db.get_or_create_position(position)
+        recruiting_db.insert_scheme_position(shortlist_id, index, position_id=position_id)
+
+    shortlist = next(
+        (item for item in _load_shortlists() if item["id"] == shortlist_id),
+        {"id": shortlist_id, "name": name, "color": color, "slots": []},
+    )
+    return jsonify({"status": "ok", "shortlist": shortlist})
 
 @app.route("/api/shortlists/<shortlist_id>", methods=["DELETE"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def delete_shortlist(shortlist_id):
-    print("delete_shortlist payload:", {"shortlistId": shortlist_id})
-    return jsonify({"status": "ok", "shortlistId": shortlist_id})
+    normalized_shortlist_id = _coerce_int(shortlist_id)
+    if normalized_shortlist_id is None:
+        return jsonify({"error": "shortlist_not_found"}), 404
+    recruiting_db.delete_scheme(normalized_shortlist_id)
+    return jsonify({"status": "ok", "shortlistId": normalized_shortlist_id})
 
 @app.route("/api/shortlists/<shortlist_id>/assign_player", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def assign_shortlist_player(shortlist_id):
     data = request.get_json() or {}
-    print("assign_shortlist_player payload:", {"shortlistId": shortlist_id, **data})
-    return jsonify({"status": "ok", "shortlistId": shortlist_id, "assignment": data})
+    normalized_shortlist_id = _coerce_int(shortlist_id)
+    player_id = _coerce_int(data.get("playerId"))
+    position = (data.get("position") or "").strip()
+    if normalized_shortlist_id is None:
+        return jsonify({"error": "shortlist_not_found"}), 404
+    if player_id is None or not position:
+        return jsonify({"error": "invalid_assignment"}), 400
+
+    slot_df = recruiting_db.custom_query_df(
+        """
+        SELECT sp.id
+        FROM scheme_positions sp
+        JOIN positions pos ON pos.id = sp.position_id
+        WHERE sp.scheme_id = ? AND pos.name = ?
+        ORDER BY sp.slot_number ASC
+        LIMIT 1
+        """,
+        (normalized_shortlist_id, position),
+    )
+    slot_records = _df_records(slot_df)
+    if not slot_records:
+        return jsonify({"error": "slot_not_found"}), 404
+
+    recruiting_db.assign_recruit_to_scheme_position(slot_records[0]["id"], player_id)
+    return jsonify({"status": "ok", "shortlistId": normalized_shortlist_id, "assignment": data})
 
 @app.route("/api/shortlists/<shortlist_id>/clear_player", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def clear_shortlist_player(shortlist_id):
     data = request.get_json() or {}
-    print("clear_shortlist_player payload:", {"shortlistId": shortlist_id, **data})
-    return jsonify({"status": "ok", "shortlistId": shortlist_id, "cleared": data})
+    normalized_shortlist_id = _coerce_int(shortlist_id)
+    slot_id = _coerce_int(data.get("slotId"))
+    if normalized_shortlist_id is None:
+        return jsonify({"error": "shortlist_not_found"}), 404
+    if slot_id is None:
+        return jsonify({"error": "slot_not_found"}), 400
+
+    recruiting_db.remove_recruit_from_scheme_position(slot_id)
+    return jsonify({"status": "ok", "shortlistId": normalized_shortlist_id, "cleared": {"slotId": slot_id}})
 
 @app.route("/api/shortlists/<shortlist_id>/slots", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def add_shortlist_slot(shortlist_id):
     data = request.get_json() or {}
-    print("add_shortlist_slot payload:", {"shortlistId": shortlist_id, **data})
-    return jsonify({
-        "status": "ok",
-        "shortlistId": shortlist_id,
-        "slot": {
-            "id": data.get("id") or f"slot-{uuid.uuid4().hex[:8]}",
-            "position": data.get("position"),
-            "playerId": data.get("playerId"),
-        },
-    })
+    normalized_shortlist_id = _coerce_int(shortlist_id)
+    position = (data.get("position") or "").strip()
+    if normalized_shortlist_id is None:
+        return jsonify({"error": "shortlist_not_found"}), 404
+    if not position:
+        return jsonify({"error": "position_required"}), 400
+
+    max_slot_df = recruiting_db.custom_query_df(
+        "SELECT COALESCE(MAX(slot_number), 0) AS max_slot FROM scheme_positions WHERE scheme_id = ?",
+        (normalized_shortlist_id,),
+    )
+    next_slot_number = (_df_records(max_slot_df)[0]["max_slot"] or 0) + 1
+    position_id = recruiting_db.get_or_create_position(position)
+    slot_id = recruiting_db.insert_scheme_position(
+        normalized_shortlist_id,
+        next_slot_number,
+        position_id=position_id,
+    )
+
+    return jsonify(
+        {
+            "status": "ok",
+            "shortlistId": normalized_shortlist_id,
+            "slot": {"id": slot_id, "position": position, "playerId": None},
+        }
+    )
 
 @app.route("/api/shortlists/<shortlist_id>/slots/<slot_id>", methods=["DELETE"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def remove_shortlist_slot(shortlist_id, slot_id):
-    print("remove_shortlist_slot payload:", {"shortlistId": shortlist_id, "slotId": slot_id})
-    return jsonify({"status": "ok", "shortlistId": shortlist_id, "slotId": slot_id})
+    normalized_shortlist_id = _coerce_int(shortlist_id)
+    normalized_slot_id = _coerce_int(slot_id)
+    if normalized_shortlist_id is None or normalized_slot_id is None:
+        return jsonify({"error": "slot_not_found"}), 404
+
+    with recruiting_db.get_conn() as conn:
+        conn.execute(
+            "DELETE FROM scheme_assignments WHERE scheme_position_id = ?",
+            (normalized_slot_id,),
+        )
+        conn.execute(
+            "DELETE FROM scheme_positions WHERE id = ? AND scheme_id = ?",
+            (normalized_slot_id, normalized_shortlist_id),
+        )
+
+    return jsonify({"status": "ok", "shortlistId": normalized_shortlist_id, "slotId": normalized_slot_id})
 
 @app.route("/api/archetypes")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_archetypes():
-    return jsonify(EXAMPLE_ARCHETYPES)
+    return jsonify(_load_archetypes())
 
 @app.route("/api/archetypes", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def create_archetype():
     data = request.get_json() or {}
-    print("create_archetype payload:", data)
-    return jsonify({
-        "status": "ok",
-        "archetype": {
-            "id": data.get("id") or f"archetype-{uuid.uuid4().hex[:8]}",
-            "name": data.get("name") or "Untitled Archetype",
-            "position": data.get("position"),
-            "notes": data.get("notes") or "",
-            "minimums": data.get("minimums") or [],
-        },
-    })
+    name = (data.get("name") or "Untitled Archetype").strip() or "Untitled Archetype"
+    position_name = (data.get("position") or "").strip()
+    notes = (data.get("notes") or "").strip()
+    minimums = data.get("minimums") or []
+
+    position_id = recruiting_db.get_or_create_position(position_name) if position_name else None
+    stat_rule_id = None
+    if minimums:
+        first_rule = minimums[0]
+        stat_key = (first_rule.get("statKey") or "").strip()
+        min_value = first_rule.get("minValue")
+        if stat_key and min_value is not None:
+            stat_id = recruiting_db.get_stat_id(stat_key, position_id)
+            if stat_id is None:
+                stat_id = recruiting_db.insert_stat(stat_key, position_id)
+            stat_rule_id = recruiting_db.insert_stat_rule(stat_id, float(min_value))
+
+    archetype_id = recruiting_db.insert_archetype(
+        title=name,
+        position_id=position_id,
+        notes=notes or None,
+        stat_rule_id=stat_rule_id,
+    )
+    archetype = next(
+        (item for item in _load_archetypes() if item["id"] == archetype_id),
+        {"id": archetype_id, "name": name, "position": position_name, "notes": notes, "minimums": minimums[:1]},
+    )
+    return jsonify({"status": "ok", "archetype": archetype})
 
 @app.route("/api/archetypes/<archetype_id>", methods=["DELETE"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def delete_archetype(archetype_id):
-    print("delete_archetype payload:", {"archetypeId": archetype_id})
-    return jsonify({"status": "ok", "archetypeId": archetype_id})
+    normalized_archetype_id = _coerce_int(archetype_id)
+    if normalized_archetype_id is None:
+        return jsonify({"error": "archetype_not_found"}), 404
+    recruiting_db.delete_archetype(normalized_archetype_id)
+    return jsonify({"status": "ok", "archetypeId": normalized_archetype_id})
 
 @app.route("/api/create_player", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def create_player():
-    data = request.get_json()
-    print(data)
-    return jsonify({"status": "ok", "player": data})
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    position_name = (data.get("position") or "").strip()
+    if not name or not position_name:
+        return jsonify({"error": "missing_required_fields"}), 400
+
+    position_id = recruiting_db.get_or_create_position(position_name)
+    recruit_type = _player_type_db_value(data.get("type")) or "high_school"
+    player_id = recruiting_db.insert_player(
+        name=name,
+        position_id=position_id,
+        is_recruit=True,
+        notes=(data.get("summary") or "").strip() or None,
+        height=_parse_height_inches(data.get("height")),
+        weight=data.get("weight"),
+        school_name=(data.get("school") or "").strip() or None,
+        state_code=(data.get("state") or "").strip() or None,
+        recruit_type=recruit_type,
+        play_year=_coerce_int(data.get("classYear")),
+    )
+
+    for stat_name, stat_value in (data.get("stats") or {}).items():
+        if stat_value in ("", None):
+            continue
+        stat_id = recruiting_db.get_stat_id(stat_name, position_id)
+        if stat_id is None:
+            stat_id = recruiting_db.insert_stat(stat_name, position_id)
+        recruiting_db.insert_player_stat(player_id, stat_id, float(stat_value))
+
+    created_player = _get_example_player(player_id)
+    return jsonify({"status": "ok", "player": created_player or {"id": player_id}})
 
 @app.route("/api/get_last_10_recruits")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
