@@ -11,6 +11,7 @@ const searchQuery = ref('')
 const activeRecruit = ref(null)
 const historicalMatches = ref([])
 const searchResults = ref([])
+const comparisonLoading = ref(false)
 
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
 const hiddenSearchCount = computed(() => 0)
@@ -19,20 +20,28 @@ async function loadActiveRecruit() {
   if (!route.query.recruitId) {
     activeRecruit.value = null
     historicalMatches.value = []
+    comparisonLoading.value = false
     return
   }
 
-  try {
-    const [playerRes, historicalRes] = await Promise.all([
-      fetch(`/api/recruits/${route.query.recruitId}`, { credentials: 'include' }),
-      fetch(`/api/recruits/${route.query.recruitId}/historical_matches`, { credentials: 'include' }),
-    ])
+  comparisonLoading.value = true
+  historicalMatches.value = []
 
+  try {
+    const playerRes = await fetch(`/api/recruits/${route.query.recruitId}`, {
+      credentials: 'include',
+    })
     activeRecruit.value = playerRes.ok ? (await playerRes.json()).player || null : null
+
+    const historicalRes = await fetch(`/api/recruits/${route.query.recruitId}/historical_matches`, {
+      credentials: 'include',
+    })
     historicalMatches.value = historicalRes.ok ? await historicalRes.json() : []
   } catch {
     activeRecruit.value = null
     historicalMatches.value = []
+  } finally {
+    comparisonLoading.value = false
   }
 }
 
@@ -155,7 +164,13 @@ function clearRecruitSelection() {
       />
     </section>
 
-    <section v-if="activeRecruit && historicalMatches.length" class="compare-panel surface-panel">
+    <section v-if="route.query.recruitId && comparisonLoading" class="compare-panel surface-panel empty-state">
+      <p class="eyebrow section-label">Top Matches</p>
+      <h3>Loading similar players...</h3>
+      <p>The comparison is running now.</p>
+    </section>
+
+    <section v-else-if="activeRecruit && historicalMatches.length" class="compare-panel surface-panel">
       <div class="section-head">
         <p class="eyebrow section-label">Top Matches</p>
         <h3>{{ activeRecruit.name }} ranked by SuperScore</h3>

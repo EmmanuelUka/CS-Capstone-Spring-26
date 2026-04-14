@@ -23,8 +23,16 @@ import sqlite3
 import pandas as pd
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 
 DB_NAME = "hashmark_players.db"
+
+
+def get_db_path() -> Path:
+    db_name = Path(DB_NAME)
+    if db_name.is_absolute():
+        return db_name
+    return Path(__file__).resolve().parent / db_name
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +41,7 @@ DB_NAME = "hashmark_players.db"
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(get_db_path())
     conn.execute("PRAGMA foreign_keys = ON;")
     try:
         yield conn

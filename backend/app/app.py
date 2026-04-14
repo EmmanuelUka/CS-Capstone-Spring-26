@@ -1772,7 +1772,12 @@ def _player_type_db_value(player_type):
 
 
 def _state_name_from_code(state_code):
-    return _STATE_CODE_TO_NAME.get((state_code or "").strip().upper(), state_code)
+    if state_code is None:
+        return None
+    raw = str(state_code).strip()
+    if not raw or raw.lower() == "nan":
+        return None
+    return _STATE_CODE_TO_NAME.get(raw.upper(), raw)
 
 
 def _transfer_playing_time_key(frequency_player, conference):
@@ -2158,8 +2163,9 @@ def _build_historical_career_profiles():
                 "conference": row.get("conference"),
                 "bio_homeState": _state_name_from_code(row.get("bio_homeState")),
             }
-        if row.get("stat_name"):
-            merged_rows[player_id][row["stat_name"]] = row.get("stat_value")
+        stat_name = row.get("stat_name")
+        if isinstance(stat_name, str) and stat_name.startswith("stat_"):
+            merged_rows[player_id][stat_name] = row.get("stat_value")
 
     return pe.build_career_profiles(list(merged_rows.values()))
 
@@ -2171,11 +2177,6 @@ def _store_player_evaluation(player_id):
 
     stats_map = _get_player_stats(player_id)
     recruit_dict = _build_eval_recruit_dict(player_record, stats_map)
-    evaluation_result = pe.evaluate(
-        pe.Recruit(**recruit_dict),
-        _build_historical_career_profiles(),
-        top_n=3,
-    )
     recruit_scores = player_metrics.player_score(
         position=recruit_dict["position"],
         recruit_type=recruit_dict["recruit_type"],
@@ -2192,8 +2193,8 @@ def _store_player_evaluation(player_id):
     eval_kwargs = {
         "height": recruit_dict["height"],
         "weight": recruit_dict["weight"],
-        "context_multiplier": evaluation_result.recruit_profile.context_multiplier,
-        "confidence": evaluation_result.recruit_profile.confidence * 100,
+        "context_multiplier": recruit_scores["context"]["multiplier"],
+        "confidence": 0,
         "physical_score": recruit_scores["physical"]["score"],
         "production_score": recruit_scores["production"]["score"],
         "context_score": recruit_scores["context"]["score"],
@@ -2203,10 +2204,38 @@ def _store_player_evaluation(player_id):
     else:
         evaluation_id = recruiting_db.insert_player_evaluation(player_id, **eval_kwargs)
 
+    return {
+        "evaluation_id": evaluation_id,
+        "recruit_dict": recruit_dict,
+        "recruit_scores": recruit_scores,
+    }
+
+
+def _run_player_comparison(player_id):
+    player_record = _get_player_row(player_id)
+    if not player_record or not player_record.get("is_recruit"):
+        return None
+
+    evaluation_info = _store_player_evaluation(player_id)
+    if not evaluation_info:
+        return None
+
+    evaluation_result = pe.evaluate(
+        pe.Recruit(**evaluation_info["recruit_dict"]),
+        _build_historical_career_profiles(),
+        top_n=3,
+    )
+    recruit_confidence = evaluation_result.recruit_profile.confidence * 100
+    recruiting_db.update_player_evaluation(
+        evaluation_info["evaluation_id"],
+        confidence=recruit_confidence,
+        context_multiplier=evaluation_result.recruit_profile.context_multiplier,
+    )
+
     top_match = evaluation_result.top_matches[0] if evaluation_result.top_matches else None
     if top_match:
         recruiting_db.insert_player_comparison(
-            evaluation_id=evaluation_id,
+            evaluation_id=evaluation_info["evaluation_id"],
             final_score=top_match.final_score,
             confidence=top_match.confidence * 100,
             recency_weight=top_match.recency_weight,
@@ -2265,7 +2294,7 @@ def _load_historical_matches(player_id):
     recruit = _get_player_row(player_id)
     if not recruit or not recruit.get("is_recruit"):
         return []
-    evaluation_result = _store_player_evaluation(player_id)
+    evaluation_result = _run_player_comparison(player_id)
     if not evaluation_result:
         return []
     return _evaluation_matches_to_payload(evaluation_result)

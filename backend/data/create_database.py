@@ -226,4 +226,4 @@ if __name__ == '__main__':
     load_csv("mac_players_dataframe.csv")
 
     import hashmark_tests
-    hashmark_tests.print_db_state("hashmark_players.db")
+    hashmark_tests.print_db_state(str(hdb.get_db_path()))
