@@ -98,7 +98,7 @@ const shortlistSummaries = computed(() =>
       </div>
     </section>
 
-    <section class="stack-panel surface-panel">
+    <!-- <section class="stack-panel surface-panel">
       <div class="panel-header">
         <div>
           <p class="page-kicker section-label">Activity</p>
@@ -116,7 +116,7 @@ const shortlistSummaries = computed(() =>
           <span>{{ item.time }}</span>
         </article>
       </div>
-    </section>
+    </section> -->
 
     <section class="stack-panel surface-panel">
       <div class="panel-header">
