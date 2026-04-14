@@ -25,7 +25,7 @@ function clearFilters(filters) {
     query: '',
     position: 'All',
     state: 'All',
-    evaluationStatus: 'All',
+    type: 'All',
     ratingFloor: 0,
   })
 }
@@ -70,12 +70,12 @@ function clearFilters(filters) {
       </label>
 
       <label class="field">
-        <span>Status</span>
+        <span>Type</span>
         <select
-          :value="filters.evaluationStatus"
-          @change="setFilter('evaluationStatus', $event.target.value, filters)"
+          :value="filters.type"
+          @change="setFilter('type', $event.target.value, filters)"
         >
-          <option v-for="option in options.statuses" :key="option" :value="option">{{ option }}</option>
+          <option v-for="option in options.types" :key="option" :value="option">{{ option }}</option>
         </select>
       </label>
     </div>

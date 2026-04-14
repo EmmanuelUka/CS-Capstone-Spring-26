@@ -8,12 +8,12 @@ import { useRecruitingStore } from '../store/useRecruitingStore'
 const router = useRouter()
 const { state } = useRecruitingStore()
 
-const readyPlayers = computed(() =>
-  state.players.filter((player) => player.evaluationStatus === 'Ready')
+const transferPlayers = computed(() =>
+  state.players.filter((player) => player.type === 'Transfer')
 )
 
-const compareQueue = computed(() =>
-  state.players.filter((player) => player.evaluationStatus === 'Compare')
+const highSchoolPlayers = computed(() =>
+  state.players.filter((player) => player.type === 'High School')
 )
 
 const averageRating = computed(() =>
@@ -46,14 +46,14 @@ const shortlistSummaries = computed(() =>
           <p>Current mock board under review.</p>
         </article>
         <article class="stat-card">
-          <span>Comparisons Run</span>
-          <strong>{{ compareQueue.length + 18 }}</strong>
-          <p>Recent comparison passes in the cycle.</p>
+          <span>Transfers</span>
+          <strong>{{ transferPlayers.length }}</strong>
+          <p>Portal prospects currently on the board.</p>
         </article>
         <article class="stat-card">
-          <span>Ready Evaluations</span>
-          <strong>{{ readyPlayers.length }}</strong>
-          <p>Players ready for staff conversation now.</p>
+          <span>High School</span>
+          <strong>{{ highSchoolPlayers.length }}</strong>
+          <p>Prep prospects currently tracked in the cycle.</p>
         </article>
         <article class="stat-card">
           <span>Avg Rating</span>

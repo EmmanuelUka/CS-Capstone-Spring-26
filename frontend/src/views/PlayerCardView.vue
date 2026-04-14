@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 import PlayerCard from '../components/PlayerCard.vue'
-import ComparisonBar from '../components/ComparisonBar.vue'
 import ScoreBadge from '../components/ScoreBadge.vue'
 import { getComparables, getPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
@@ -74,35 +73,10 @@ function openPlayer(playerId) {
 
         <p class="body-copy">{{ player.explanation }}</p>
 
-        <div class="bars">
-          <ComparisonBar
-            label="Physical"
-            :left-value="player.breakdown.physical"
-            :right-value="100 - player.breakdown.physical"
-            left-label="Score"
-            right-label="Headroom"
-          />
-          <ComparisonBar
-            label="Athletic"
-            :left-value="player.breakdown.athletic"
-            :right-value="100 - player.breakdown.athletic"
-            left-label="Score"
-            right-label="Headroom"
-          />
-          <ComparisonBar
-            label="Production"
-            :left-value="player.breakdown.production"
-            :right-value="100 - player.breakdown.production"
-            left-label="Score"
-            right-label="Headroom"
-          />
-          <ComparisonBar
-            label="Context"
-            :left-value="player.breakdown.context"
-            :right-value="100 - player.breakdown.context"
-            left-label="Score"
-            right-label="Headroom"
-          />
+        <div class="score-row">
+          <ScoreBadge label="Physical" :value="player.breakdown.physical" tone="gold" />
+          <ScoreBadge label="Production" :value="player.breakdown.production" tone="mint" />
+          <ScoreBadge label="Context" :value="player.breakdown.context" tone="blue" />
         </div>
       </section>
 
@@ -225,7 +199,6 @@ function openPlayer(playerId) {
   gap: 0.8rem;
 }
 
-.bars,
 .compare-list {
   display: grid;
   gap: 0.9rem;
