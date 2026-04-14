@@ -13,7 +13,14 @@ const dashboardStats = ref(null)
 const statsLoading = ref(true)
 const statsError = ref(null)
 
+// --- Remaining computed values (still from store) ---
+const featuredPlayers = ref(null);
+let featuredPlayersLoaded = ref(false);
+
+const shortlistSummaries = ref([])
+
 onMounted(async () => {
+  //dashboard information
   try {
     const res = await fetch('api/dashboard_info')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -23,17 +30,36 @@ onMounted(async () => {
   } finally {
     statsLoading.value = false
   }
+
+  //top 3 most recent recruits
+  try {
+    const res = await fetch('api/top_3_most_recent_recruits')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    featuredPlayers.value = await res.json()
+  } catch (err) {
+    console.log("Problem with Featured Players: ", err.message)
+  } finally {
+    featuredPlayersLoaded.value = true
+  }
+
+  try {
+    const res = await fetch('api/recent_shortlists')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+
+    shortlistSummaries.value = data.map((list) => ({
+      ...list,
+      filledCount: list.slots.filter((slot) => slot.playerId).length,
+      totalCount: list.slots.length,
+    }))
+  } catch (err) {
+    console.log('Problem with Shortlist summaries:', err.message)
+  }
 })
 
-// --- Remaining computed values (still from store) ---
-const featuredPlayers = computed(() => state.players.slice(0, 3))
-const shortlistSummaries = computed(() =>
-  state.shortlists.map((list) => ({
-    ...list,
-    filledCount: list.slots.filter((slot) => slot.playerId).length,
-    totalCount: list.slots.length,
-  }))
-)
+
+
+
 </script>
 
 <template>
@@ -81,6 +107,13 @@ const shortlistSummaries = computed(() =>
         <button class="text-link" type="button" @click="router.push('/players')">Open board</button>
       </div>
 
+      <transition v-if="!featuredPlayersLoaded" name="request-whirler">
+        <div class="request-whirler" aria-live="polite" aria-label="Loading">
+          <span class="request-whirler-spinner"></span>
+          <span>Loading</span>
+        </div>
+      </transition>
+
       <div class="recruit-list">
         <button
           v-for="player in featuredPlayers"
@@ -122,7 +155,7 @@ const shortlistSummaries = computed(() =>
       <div class="panel-header">
         <div>
           <p class="page-kicker section-label">Shortlists</p>
-          <h3>Board groups</h3>
+          <h3>Shortlists</h3>
         </div>
         <button class="text-link" type="button" @click="router.push('/shortlists')">Manage</button>
       </div>
@@ -131,7 +164,7 @@ const shortlistSummaries = computed(() =>
         <article v-for="list in shortlistSummaries" :key="list.id" class="shortlist-card">
           <span class="swatch" :style="{ background: list.color }" />
           <strong>{{ list.name }}</strong>
-          <p>{{ list.filledCount }} of {{ list.totalCount }} positions filled</p>
+          <p>{{ list.filledCount }} positions filled</p>
         </article>
       </div>
     </section>
@@ -282,6 +315,55 @@ const shortlistSummaries = computed(() =>
 
   .stats-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.request-whirler {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(217, 151, 0, 0.14), rgba(255, 255, 255, 0.03)),
+    rgba(9, 17, 31, 0.92);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(18px);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.request-whirler-spinner {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--accent-strong);
+  animation: whirler-spin 0.8s linear infinite;
+}
+
+.request-whirler-enter-active,
+.request-whirler-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.request-whirler-enter-from,
+.request-whirler-leave-to {
+  opacity: 0;
+  transform: translateY(-0.35rem);
+}
+
+@keyframes whirler-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

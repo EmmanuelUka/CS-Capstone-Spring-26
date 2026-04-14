@@ -1230,116 +1230,72 @@ def get_dashboard_info():
 def get_top_3_most_recent_recruits():
 
     players = [
-    {
-        "id": 1,
-        "name": "Evan Brooks",
-        "school": "St. Xavier",
-        "state": "OH",
-        "city": "Cincinnati",
-        "classYear": 2027,
-        "position": "QB",
-        "projectedPosition": "RPO Quarterback",
-        "type": "High School",
-        "height": "6'2\"",
-        "weight": 204,
-        "fortyTime": "4.68",
-        "gpa": 3.7,
-        "rating": 91,
-        "stars": 4,
-        "jersey": "#7",
-        "archetype": "Field Commander",
-        "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
-        "explanation": "Best fit in a spread system that wants early-decision throws, designed movement, and efficient third-down answers.",
-        "notes": "High-volume thrower with clean mechanics. Coaches flagged leadership and poise as early separators.",
-        "schemeFit": 93,
-        "comparisonScore": 92,
-        "confidenceScore": 88,
-        "breakdown": {
-        "physical": 82,
-        "athletic": 79,
-        "production": 94,
-        "context": 87
+        {
+            "id": 1,
+            "name": "Evan Brooks",
+            "school": "St. Xavier",
+            "state": "OH",
+            "city": "Cincinnati",
+            "classYear": 2027,
+            "position": "QB",
         },
-        "stats": {
-        "passingYards": 3248,
-        "touchdowns": 34,
-        "interceptions": 6,
-        "rushYards": 512
+        {
+            "id": 2,
+            "name": "Evan Brooks",
+            "school": "St. Xavier",
+            "state": "OH",
+            "city": "Cincinnati",
+            "classYear": 2027,
+            "position": "QB",
         },
-        "topComparables": [4, 6, 7]
-    },
-    {
-        "id": 2,
-        "name": "Malik Dorsey",
-        "school": "Buford",
-        "state": "GA",
-        "city": "Buford",
-        "classYear": 2027,
-        "position": "WR",
-        "projectedPosition": "Boundary X Receiver",
-        "type": "High School",
-        "height": "6'3\"",
-        "weight": 196,
-        "fortyTime": "4.43",
-        "gpa": 3.4,
-        "rating": 94,
-        "stars": 4,
-        "jersey": "#1",
-        "archetype": "Vertical Winner",
-        "summary": "Explosive outside target who wins stacked releases, tracks the deep ball, and creates red-zone leverage.",
-        "explanation": "Prototype boundary receiver for an offense that wants isolated shot plays and a back-shoulder answer on money downs.",
-        "notes": "Elite acceleration off the line. Needs more polish on underneath pacing but already changes coverage structure.",
-        "schemeFit": 95,
-        "comparisonScore": 94,
-        "confidenceScore": 90,
-        "breakdown": {
-        "physical": 86,
-        "athletic": 94,
-        "production": 89,
-        "context": 85
+        {
+            "id": 3,
+            "name": "Evan Brooks",
+            "school": "St. Xavier",
+            "state": "OH",
+            "city": "Cincinnati",
+            "classYear": 2027,
+            "position": "QB",
         },
-        "stats": {
-        "receptions": 71,
-        "receivingYards": 1284,
-        "touchdowns": 16,
-        "contestedCatchRate": "68%"
-        },
-        "topComparables": [5, 6, 4]
-    },
-    {
-        "id": 3,
-        "name": "Isaiah Ford",
-        "school": "IMG Academy",
-        "state": "FL",
-        "city": "Bradenton",
-        "classYear": 2027,
-        "position": "LB",
-        "projectedPosition": "Run-and-Chase Mike",
-        "type": "High School",
-        "height": "6'1\"",
-        "weight": 228,
-        "fortyTime": "4.59",
-        "gpa": 3.6,
-        "rating": 89,
-        "stars": 3,
-        "jersey": "#32",
-        "archetype": "Front-Seven Eraser",
-        "summary": "Trigger-fast second-level defender with strong pursuit angles and reliable finish technique.",
-        "explanation": "Profiles as a middle linebacker in pressure packages where range and closing speed matter more than pure size.",
-        "notes": "Very clean diagnostic tape. One of the safest defensive evaluations in the board.",
-        "schemeFit": 91,
-        "comparisonScore": 90,
-        "confidenceScore": 92,
-        "breakdown": {
-        "physical": 81,
-        "athletic": 90,
-        "production": 88,
-        "context": 89
-        }
-    }
     ]
 
     return jsonify(players)
+
+@app.route("/api/recent_shortlists")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_recent_shortlists():
+    shortlists = [
+    {
+    "id": 'priority-board',
+    "name": 'Priority Board',
+    "color": '#ffb75e',
+    "slots": [
+        { "position": 'QB', "playerId": 1 },
+        { "position": 'WR', "playerId": 2 },
+        { "position": 'CB', "playerId": 5 },
+    ],
+    },
+    {
+    "id": 'midwest-targets',
+    "name": 'Midwest Targets',
+    "color": '#79c8ff',
+    "slots": [
+        { "position": 'QB', "playerId": 1 },
+        { "position": 'LB', "playerId": 3 },
+        { "position": 'CB', "playerId": 5 },
+    ],
+    },
+    {
+    "id": 'late-cycle',
+    "name": 'Late Cycle Values',
+    "color": '#8dd8a7',
+    "slots": [
+        { "position": 'QB', "playerId": 4 },
+        { "position": 'EDGE', "playerId": 7 },
+    ],
+    },
+    ]
+    return jsonify(shortlists)
 
 # =========================================================
 # Local Dev Entrypoint
