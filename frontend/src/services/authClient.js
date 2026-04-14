@@ -1,3 +1,5 @@
+import { beginRequest, endRequest } from '../composables/useRequestState'
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 function resolveUrl(path) {
@@ -5,30 +7,36 @@ function resolveUrl(path) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(resolveUrl(path), {
-    credentials: 'include',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  })
+  beginRequest()
 
-  if (!response.ok) {
-    let message = 'Request failed.'
+  try {
+    const response = await fetch(resolveUrl(path), {
+      credentials: 'include',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    })
 
-    try {
-      const payload = await response.json()
-      message = payload?.error || message
-    } catch {
-      message = response.statusText || message
+    if (!response.ok) {
+      let message = 'Request failed.'
+
+      try {
+        const payload = await response.json()
+        message = payload?.error || message
+      } catch {
+        message = response.statusText || message
+      }
+
+      throw new Error(message)
     }
 
-    throw new Error(message)
+    const contentType = response.headers.get('content-type') || ''
+    return contentType.includes('application/json') ? response.json() : null
+  } finally {
+    endRequest()
   }
-
-  const contentType = response.headers.get('content-type') || ''
-  return contentType.includes('application/json') ? response.json() : null
 }
 
 export async function getCsrfToken() {

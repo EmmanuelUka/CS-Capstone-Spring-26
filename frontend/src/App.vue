@@ -5,6 +5,7 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import AuthView from './views/AuthView.vue'
 import TopMenuBar from './components/TopMenuBar.vue'
 import { useAuthSession } from './composables/useAuthSession'
+import { useRequestState } from './composables/useRequestState'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '◉' },
@@ -18,6 +19,7 @@ const navItems = [
 const router = useRouter()
 const route = useRoute()
 const { loading, authBusy, status, user, isAuthenticated, login, logout } = useAuthSession()
+const { isRequestPending } = useRequestState()
 
 const currentPath = computed(() => route.path)
 
@@ -42,6 +44,13 @@ function go(path) {
     />
 
     <div v-else class="page-wrap">
+      <transition name="request-whirler">
+        <div v-if="isRequestPending" class="request-whirler" aria-live="polite" aria-label="Loading">
+          <span class="request-whirler-spinner" />
+          <span>Loading</span>
+        </div>
+      </transition>
+
       <TopMenuBar
         :items="navItems"
         :current-path="currentPath"
@@ -79,6 +88,50 @@ function go(path) {
   display: grid;
 }
 
+.request-whirler {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(217, 151, 0, 0.14), rgba(255, 255, 255, 0.03)),
+    rgba(9, 17, 31, 0.92);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(18px);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.request-whirler-spinner {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--accent-strong);
+  animation: whirler-spin 0.8s linear infinite;
+}
+
+.request-whirler-enter-active,
+.request-whirler-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.request-whirler-enter-from,
+.request-whirler-leave-to {
+  opacity: 0;
+  transform: translateY(-0.35rem);
+}
+
 .auth-loading {
   width: min(32rem, 100%);
   padding: 2rem;
@@ -98,6 +151,12 @@ function go(path) {
 @media (min-width: 720px) {
   .page-wrap {
     width: min(1380px, calc(100% - 2rem));
+  }
+}
+
+@keyframes whirler-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>
