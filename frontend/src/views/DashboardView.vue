@@ -2,7 +2,6 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { activityFeed } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
 const router = useRouter()

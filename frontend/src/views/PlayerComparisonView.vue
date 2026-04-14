@@ -4,13 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 
 import ComparisonBar from '../components/ComparisonBar.vue'
 import PlayerCard from '../components/PlayerCard.vue'
-import { getHistoricalMatches, getPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 import { playerIdsMatch } from '../utils/playerIds'
 
 const router = useRouter()
 const route = useRoute()
-const { state } = useRecruitingStore()
+const { state, getHistoricalMatches, getPlayerById } = useRecruitingStore()
 const searchQuery = ref('')
 
 const activeRecruit = computed(() => getPlayerById(route.query.recruitId))

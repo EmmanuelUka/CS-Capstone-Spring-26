@@ -3,7 +3,6 @@ import { onMounted, ref } from 'vue'
 
 import AppShellHeader from '../components/AppShellHeader.vue'
 import PlayerCard from '../components/PlayerCard.vue'
-import testPlayers from '../data/testplayers.json'
 
 defineProps({
   authBusy: {
@@ -34,8 +33,22 @@ const players = ref([])
 const loading = ref(true)
 
 onMounted(() => {
-  players.value = Array.isArray(testPlayers) ? testPlayers : []
-  loading.value = false
+  fetch('/api/get_last_10_recruits', {
+    credentials: 'include',
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      players.value = await response.json()
+    })
+    .catch(() => {
+      players.value = []
+    })
+    .finally(() => {
+      loading.value = false
+    })
 })
 </script>
 

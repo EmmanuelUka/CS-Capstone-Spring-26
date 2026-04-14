@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import SearchableDropdown from '../components/SearchableDropdown.vue'
-import { getPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
 const router = useRouter()
@@ -16,6 +15,7 @@ const {
   addPositionSlot,
   removePositionSlot,
   rosterPositions,
+  getPlayerById,
 } = useRecruitingStore()
 
 const form = ref({

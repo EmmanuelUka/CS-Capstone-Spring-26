@@ -1212,90 +1212,356 @@ def api_delete_user():
 
 ### End endpoint should check that the user has a valid session. Otherwise, prompt user to log in again
 
+EXAMPLE_RECRUITING_PLAYERS = [
+    {
+        "id": 1,
+        "name": "Evan Brooks",
+        "school": "St. Xavier",
+        "state": "OH",
+        "city": "Cincinnati",
+        "classYear": 2027,
+        "position": "QB",
+        "projectedPosition": "RPO Quarterback",
+        "type": "High School",
+        "height": "6'2\"",
+        "weight": 204,
+        "fortyTime": "4.68",
+        "gpa": 3.7,
+        "rating": 91,
+        "stars": 4,
+        "jersey": "#7",
+        "archetype": "Field Commander",
+        "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
+        "explanation": "Best fit in a spread system that wants early-decision throws, designed movement, and efficient third-down answers.",
+        "notes": "High-volume thrower with clean mechanics. Coaches flagged leadership and poise as early separators.",
+        "schemeFit": 93,
+        "comparisonScore": 92,
+        "confidenceScore": 88,
+        "breakdown": {"physical": 82, "athletic": 79, "production": 94, "context": 87},
+        "stats": {"passingYards": 3248, "touchdowns": 34, "interceptions": 6, "rushYards": 512},
+        "topComparables": [4, 6, 7],
+    },
+    {
+        "id": 2,
+        "name": "Malik Dorsey",
+        "school": "Buford",
+        "state": "GA",
+        "city": "Buford",
+        "classYear": 2027,
+        "position": "WR",
+        "projectedPosition": "Boundary X Receiver",
+        "type": "High School",
+        "height": "6'3\"",
+        "weight": 196,
+        "fortyTime": "4.43",
+        "gpa": 3.4,
+        "rating": 94,
+        "stars": 4,
+        "jersey": "#1",
+        "archetype": "Vertical Winner",
+        "summary": "Explosive outside target who wins stacked releases, tracks the deep ball, and creates red-zone leverage.",
+        "explanation": "Prototype boundary receiver for an offense that wants isolated shot plays and a back-shoulder answer on money downs.",
+        "notes": "Elite acceleration off the line. Needs more polish on underneath pacing but already changes coverage structure.",
+        "schemeFit": 95,
+        "comparisonScore": 94,
+        "confidenceScore": 90,
+        "breakdown": {"physical": 86, "athletic": 94, "production": 89, "context": 85},
+        "stats": {"receptions": 71, "receivingYards": 1284, "touchdowns": 16, "contestedCatchRate": "68%"},
+        "topComparables": [5, 6, 4],
+    },
+    {
+        "id": 3,
+        "name": "Isaiah Ford",
+        "school": "IMG Academy",
+        "state": "FL",
+        "city": "Bradenton",
+        "classYear": 2027,
+        "position": "LB",
+        "projectedPosition": "Run-and-Chase Mike",
+        "type": "High School",
+        "height": "6'1\"",
+        "weight": 228,
+        "fortyTime": "4.59",
+        "gpa": 3.6,
+        "rating": 89,
+        "stars": 3,
+        "jersey": "#32",
+        "archetype": "Front-Seven Eraser",
+        "summary": "Trigger-fast second-level defender with strong pursuit angles and reliable finish technique.",
+        "explanation": "Profiles as a middle linebacker in pressure packages where range and closing speed matter more than pure size.",
+        "notes": "Very clean diagnostic tape. One of the safest defensive evaluations in the board.",
+        "schemeFit": 91,
+        "comparisonScore": 90,
+        "confidenceScore": 92,
+        "breakdown": {"physical": 81, "athletic": 90, "production": 88, "context": 89},
+        "stats": {"tackles": 117, "tacklesForLoss": 18, "sacks": 6, "forcedFumbles": 3},
+        "topComparables": [7, 5, 1],
+    },
+    {
+        "id": 4,
+        "name": "Tyler Morris",
+        "school": "North Shore",
+        "state": "TX",
+        "city": "Houston",
+        "classYear": 2026,
+        "position": "QB",
+        "projectedPosition": "Pocket Distributor",
+        "type": "Transfer",
+        "height": "6'4\"",
+        "weight": 212,
+        "fortyTime": "4.84",
+        "gpa": 3.8,
+        "rating": 87,
+        "stars": 3,
+        "jersey": "#12",
+        "archetype": "Timing Thrower",
+        "summary": "Tall pocket passer with advanced anticipation and clean footwork in structured dropback concepts.",
+        "explanation": "Best fit in a timing-based offense that majors in play-action, deeper dig windows, and controlled movement.",
+        "notes": "Less dynamic outside structure, but the floor is high because of processing and touch.",
+        "schemeFit": 88,
+        "comparisonScore": 86,
+        "confidenceScore": 84,
+        "breakdown": {"physical": 84, "athletic": 71, "production": 85, "context": 88},
+        "stats": {"passingYards": 2987, "touchdowns": 27, "interceptions": 8, "completionRate": "68%"},
+        "topComparables": [1, 6, 7],
+    },
+    {
+        "id": 5,
+        "name": "Jalen Strickland",
+        "school": "Cass Tech",
+        "state": "MI",
+        "city": "Detroit",
+        "classYear": 2026,
+        "position": "CB",
+        "projectedPosition": "Press Corner",
+        "type": "High School",
+        "height": "6'0\"",
+        "weight": 184,
+        "fortyTime": "4.41",
+        "gpa": 3.5,
+        "rating": 90,
+        "stars": 4,
+        "jersey": "#4",
+        "archetype": "Mirror Corner",
+        "summary": "Length, patience, and recovery burst show up immediately against high-level wideouts.",
+        "explanation": "Strong match for a defense that wants man coverage flexibility and trusts corners to challenge the release.",
+        "notes": "Ball production climbed late. Still adding lower-body power but the coverage traits are real.",
+        "schemeFit": 92,
+        "comparisonScore": 89,
+        "confidenceScore": 87,
+        "breakdown": {"physical": 80, "athletic": 93, "production": 84, "context": 86},
+        "stats": {"passBreakups": 14, "interceptions": 5, "tackles": 39, "completionAllowed": "38%"},
+        "topComparables": [2, 3, 7],
+    },
+    {
+        "id": 6,
+        "name": "Caden Price",
+        "school": "Bishop Gorman",
+        "state": "NV",
+        "city": "Las Vegas",
+        "classYear": 2027,
+        "position": "TE",
+        "projectedPosition": "Move Tight End",
+        "type": "Transfer",
+        "height": "6'5\"",
+        "weight": 232,
+        "fortyTime": "4.61",
+        "gpa": 3.9,
+        "rating": 88,
+        "stars": 4,
+        "jersey": "#86",
+        "archetype": "Flex Mismatch",
+        "summary": "Long, fluid pass catcher who threatens seams, flex alignments, and third-down mismatch packages.",
+        "explanation": "Ideal for a coordinator who wants a detached tight end to stress linebackers without sacrificing red-zone size.",
+        "notes": "Route pacing is ahead of schedule. Blocking profile is developmental but usable in motion-heavy looks.",
+        "schemeFit": 90,
+        "comparisonScore": 88,
+        "confidenceScore": 85,
+        "breakdown": {"physical": 88, "athletic": 86, "production": 80, "context": 82},
+        "stats": {"receptions": 49, "receivingYards": 811, "touchdowns": 11, "yardsAfterCatch": 241},
+        "topComparables": [2, 4, 1],
+    },
+    {
+        "id": 7,
+        "name": "Miles Turner",
+        "school": "St. Frances Academy",
+        "state": "MD",
+        "city": "Baltimore",
+        "classYear": 2026,
+        "position": "EDGE",
+        "projectedPosition": "Stand-up Edge",
+        "type": "High School",
+        "height": "6'4\"",
+        "weight": 241,
+        "fortyTime": "4.66",
+        "gpa": 3.2,
+        "rating": 86,
+        "stars": 3,
+        "jersey": "#9",
+        "archetype": "Pressure Specialist",
+        "summary": "Long outside rusher with real first-step speed and enough bend to threaten the corner.",
+        "explanation": "High-variance edge prospect who fits best in an aggressive front that creates wide rush tracks and games.",
+        "notes": "Pass-rush flashes are premium. Needs more snap-to-snap consistency against the run.",
+        "schemeFit": 84,
+        "comparisonScore": 85,
+        "confidenceScore": 79,
+        "breakdown": {"physical": 83, "athletic": 88, "production": 77, "context": 80},
+        "stats": {"sacks": 11, "pressures": 36, "tacklesForLoss": 15, "qbHits": 19},
+        "topComparables": [3, 5, 2],
+    },
+]
+
+EXAMPLE_SHORTLISTS = [
+    {
+        "id": "priority-board",
+        "name": "Priority Board",
+        "color": "#ffb75e",
+        "slots": [
+            {"position": "QB", "playerId": 1},
+            {"position": "WR", "playerId": 2},
+            {"position": "CB", "playerId": 5},
+        ],
+    },
+    {
+        "id": "midwest-targets",
+        "name": "Midwest Targets",
+        "color": "#79c8ff",
+        "slots": [
+            {"position": "QB", "playerId": 1},
+            {"position": "LB", "playerId": 3},
+            {"position": "CB", "playerId": 5},
+        ],
+    },
+    {
+        "id": "late-cycle",
+        "name": "Late Cycle Values",
+        "color": "#8dd8a7",
+        "slots": [
+            {"position": "QB", "playerId": 4},
+            {"position": "EDGE", "playerId": 7},
+        ],
+    },
+]
+
+EXAMPLE_ACTIVITY_FEED = [
+    {
+        "id": "act-1",
+        "label": "Comparison run completed",
+        "detail": "Evan Brooks vs Tyler Morris updated with a new production edge.",
+        "time": "12 min ago",
+    },
+    {
+        "id": "act-2",
+        "label": "Shortlist updated",
+        "detail": "Malik Dorsey moved into Priority Board after spring eval.",
+        "time": "35 min ago",
+    },
+    {
+        "id": "act-3",
+        "label": "Coach note added",
+        "detail": "Isaiah Ford tagged as a fit for pressure-heavy packages.",
+        "time": "1 hr ago",
+    },
+    {
+        "id": "act-4",
+        "label": "Visit scheduled",
+        "detail": "Caden Price set for an on-campus June visit.",
+        "time": "Today",
+    },
+]
+
+EXAMPLE_HISTORICAL_MATCHES = {
+    1: [
+        {"historicalId": "qb-hist-1", "name": "Jordan Reeves", "position": "QB", "school": "Oklahoma State", "conference": "Big 12", "lastSeason": 2023, "comparisonScores": {"physical": 90, "production": 93, "context": 84}},
+        {"historicalId": "qb-hist-2", "name": "Malik James", "position": "QB", "school": "Appalachian State", "conference": "Sun Belt", "lastSeason": 2023, "comparisonScores": {"physical": 87, "production": 85, "context": 80}},
+        {"historicalId": "qb-hist-3", "name": "Connor Hale", "position": "QB", "school": "Kansas State", "conference": "Big 12", "lastSeason": 2021, "comparisonScores": {"physical": 82, "production": 88, "context": 79}},
+    ],
+    2: [
+        {"historicalId": "wr-hist-1", "name": "Marcus Hill", "position": "WR", "school": "Georgia", "conference": "SEC", "lastSeason": 2023, "comparisonScores": {"physical": 89, "production": 92, "context": 88}},
+        {"historicalId": "wr-hist-2", "name": "Tyler Owens", "position": "WR", "school": "Michigan State", "conference": "Big Ten", "lastSeason": 2018, "comparisonScores": {"physical": 86, "production": 89, "context": 83}},
+        {"historicalId": "wr-hist-3", "name": "DeShawn Brooks", "position": "WR", "school": "Toledo", "conference": "MAC", "lastSeason": 2023, "comparisonScores": {"physical": 82, "production": 84, "context": 78}},
+    ],
+    3: [
+        {"historicalId": "lb-hist-1", "name": "Andre Wallace", "position": "LB", "school": "Wisconsin", "conference": "Big Ten", "lastSeason": 2022, "comparisonScores": {"physical": 84, "production": 90, "context": 87}},
+        {"historicalId": "lb-hist-2", "name": "Micah Benton", "position": "LB", "school": "Kentucky", "conference": "SEC", "lastSeason": 2023, "comparisonScores": {"physical": 82, "production": 88, "context": 85}},
+        {"historicalId": "lb-hist-3", "name": "Cole Mercer", "position": "LB", "school": "Iowa", "conference": "Big Ten", "lastSeason": 2021, "comparisonScores": {"physical": 79, "production": 85, "context": 84}},
+    ],
+    4: [
+        {"historicalId": "qb-hist-4", "name": "Ethan Wade", "position": "QB", "school": "Wake Forest", "conference": "ACC", "lastSeason": 2022, "comparisonScores": {"physical": 88, "production": 84, "context": 86}},
+        {"historicalId": "qb-hist-5", "name": "Jordan Reeves", "position": "QB", "school": "Oklahoma State", "conference": "Big 12", "lastSeason": 2023, "comparisonScores": {"physical": 86, "production": 82, "context": 88}},
+        {"historicalId": "qb-hist-6", "name": "Parker Sloan", "position": "QB", "school": "BYU", "conference": "Big 12", "lastSeason": 2020, "comparisonScores": {"physical": 83, "production": 80, "context": 84}},
+    ],
+    5: [
+        {"historicalId": "cb-hist-1", "name": "Kris Vaughn", "position": "CB", "school": "LSU", "conference": "SEC", "lastSeason": 2023, "comparisonScores": {"physical": 85, "production": 88, "context": 84}},
+        {"historicalId": "cb-hist-2", "name": "Darius Cole", "position": "CB", "school": "Michigan", "conference": "Big Ten", "lastSeason": 2022, "comparisonScores": {"physical": 83, "production": 86, "context": 82}},
+        {"historicalId": "cb-hist-3", "name": "Tre Holloway", "position": "CB", "school": "Louisville", "conference": "ACC", "lastSeason": 2021, "comparisonScores": {"physical": 80, "production": 84, "context": 81}},
+    ],
+    6: [
+        {"historicalId": "te-hist-1", "name": "Logan Cross", "position": "TE", "school": "Utah", "conference": "Pac-12", "lastSeason": 2023, "comparisonScores": {"physical": 91, "production": 83, "context": 82}},
+        {"historicalId": "te-hist-2", "name": "Brady Shelton", "position": "TE", "school": "Notre Dame", "conference": "Independent", "lastSeason": 2022, "comparisonScores": {"physical": 88, "production": 80, "context": 79}},
+        {"historicalId": "te-hist-3", "name": "Mason Pike", "position": "TE", "school": "Kansas State", "conference": "Big 12", "lastSeason": 2021, "comparisonScores": {"physical": 84, "production": 78, "context": 77}},
+    ],
+    7: [
+        {"historicalId": "edge-hist-1", "name": "Jermaine Pratt", "position": "EDGE", "school": "Penn State", "conference": "Big Ten", "lastSeason": 2023, "comparisonScores": {"physical": 86, "production": 82, "context": 80}},
+        {"historicalId": "edge-hist-2", "name": "Quincy Reed", "position": "EDGE", "school": "Ole Miss", "conference": "SEC", "lastSeason": 2022, "comparisonScores": {"physical": 84, "production": 79, "context": 83}},
+        {"historicalId": "edge-hist-3", "name": "Damon Graves", "position": "EDGE", "school": "NC State", "conference": "ACC", "lastSeason": 2021, "comparisonScores": {"physical": 82, "production": 77, "context": 78}},
+    ],
+}
+
+
+def _average_score(scores):
+    values = [value for value in scores.values() if isinstance(value, (int, float))]
+    if not values:
+        return 0
+    return round(sum(values) / len(values))
+
+
+def _build_example_recruiting_payload():
+    total_players = len(EXAMPLE_RECRUITING_PLAYERS)
+    transfers = sum(1 for player in EXAMPLE_RECRUITING_PLAYERS if player.get("type") == "Transfer")
+    ratings = [player.get("rating") for player in EXAMPLE_RECRUITING_PLAYERS if isinstance(player.get("rating"), (int, float))]
+
+    return {
+        "dashboard": {
+            "total_players": total_players,
+            "transfers": transfers,
+            "high_school": total_players - transfers,
+            "avg_rating": round(sum(ratings) / len(ratings)) if ratings else 0,
+        },
+        "players": EXAMPLE_RECRUITING_PLAYERS,
+        "recentPlayers": EXAMPLE_RECRUITING_PLAYERS[:3],
+        "lastTenRecruits": EXAMPLE_RECRUITING_PLAYERS[:10],
+        "shortlists": EXAMPLE_SHORTLISTS,
+        "activityFeed": EXAMPLE_ACTIVITY_FEED,
+        "historicalMatches": {
+            str(player_id): [
+                {**match, "superScore": _average_score(match.get("comparisonScores", {}))}
+                for match in matches
+            ]
+            for player_id, matches in EXAMPLE_HISTORICAL_MATCHES.items()
+        },
+    }
+
+
+@app.route("/api/example_recruiting_data")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_example_recruiting_data():
+    return jsonify(_build_example_recruiting_payload())
+
 @app.route("/api/dashboard_info")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_dashboard_info():
-
-    data = {
-        "total_players": 7,
-        "transfers": 2,
-        "high_school": 5,
-        "avg_rating": 89
-    }
-
-    return jsonify(data)
+    return jsonify(_build_example_recruiting_payload()["dashboard"])
 
 @app.route("/api/top_3_most_recent_recruits")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_top_3_most_recent_recruits():
-
-    players = [
-        {
-            "id": 1,
-            "name": "Evan Brooks",
-            "school": "St. Xavier",
-            "state": "OH",
-            "city": "Cincinnati",
-            "classYear": 2027,
-            "position": "QB",
-        },
-        {
-            "id": 2,
-            "name": "Evan Brooks",
-            "school": "St. Xavier",
-            "state": "OH",
-            "city": "Cincinnati",
-            "classYear": 2027,
-            "position": "QB",
-        },
-        {
-            "id": 3,
-            "name": "Evan Brooks",
-            "school": "St. Xavier",
-            "state": "OH",
-            "city": "Cincinnati",
-            "classYear": 2027,
-            "position": "QB",
-        },
-    ]
-
-    return jsonify(players)
+    return jsonify(_build_example_recruiting_payload()["recentPlayers"])
 
 @app.route("/api/recent_shortlists")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_recent_shortlists():
-    shortlists = [
-    {
-    "id": 'priority-board',
-    "name": 'Priority Board',
-    "color": '#ffb75e',
-    "slots": [
-        { "position": 'QB', "playerId": 1 },
-        { "position": 'WR', "playerId": 2 },
-        { "position": 'CB', "playerId": 5 },
-    ],
-    },
-    {
-    "id": 'midwest-targets',
-    "name": 'Midwest Targets',
-    "color": '#79c8ff',
-    "slots": [
-        { "position": 'QB', "playerId": 1 },
-        { "position": 'LB', "playerId": 3 },
-        { "position": 'CB', "playerId": 5 },
-    ],
-    },
-    {
-    "id": 'late-cycle',
-    "name": 'Late Cycle Values',
-    "color": '#8dd8a7',
-    "slots": [
-        { "position": 'QB', "playerId": 4 },
-        { "position": 'EDGE', "playerId": 7 },
-    ],
-    },
-    ]
-    return jsonify(shortlists)
+    return jsonify(_build_example_recruiting_payload()["shortlists"])
 
 @app.route("/api/create_player", methods=["POST"])
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
@@ -1307,76 +1573,7 @@ def create_player():
 @app.route("/api/get_last_10_recruits")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_last_10_recruits():
-    
-    players = [
-        {
-            "id": 1,
-            "name": "Evan Brooks",
-            "school": "St. Xavier",
-            "state": "OH",
-            "city": "Cincinnati",
-            "classYear": 2027,
-            "position": "QB",
-
-            "type": "High School",
-            "height": "6'2\"",
-            "weight": 204,
-
-            "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
-
-            "breakdown": {
-            "physical": 82,
-            "production": 94,
-            "context": 87
-            }
-
-        },
-        {
-            "id": 2,
-            "name": "Evan Brooks",
-            "school": "St. Xavier",
-            "state": "OH",
-            "city": "Cincinnati",
-            "classYear": 2027,
-            "position": "QB",
-
-            "type": "High School",
-            "height": "6'2\"",
-            "weight": 204,
-
-            "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
-
-            "breakdown": {
-            "physical": 82,
-            "production": 94,
-            "context": 87
-            }
-
-        },
-        {
-            "id": 3,
-            "name": "Evan Brooks",
-            "school": "St. Xavier",
-            "state": "OH",
-            "city": "Cincinnati",
-            "classYear": 2027,
-            "position": "QB",
-
-            "type": "High School",
-            "height": "6'2\"",
-            "weight": 204,
-
-            "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
-
-            "breakdown": {
-            "physical": 82,
-            "production": 94,
-            "context": 87
-            }
-
-        },
-    ]
-    return jsonify(players)
+    return jsonify(_build_example_recruiting_payload()["lastTenRecruits"])
 
 # =========================================================
 # Local Dev Entrypoint

@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 
 import PlayerCard from '../components/PlayerCard.vue'
 import ScoreBadge from '../components/ScoreBadge.vue'
-import { getComparables, getDisplayPlayerById } from '../data/mockRecruitingData'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 import { playerIdsMatch } from '../utils/playerIds'
 
@@ -16,7 +15,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const { state } = useRecruitingStore()
+const { state, getComparables, getDisplayPlayerById } = useRecruitingStore()
 
 const player = computed(() => getDisplayPlayerById(props.playerId))
 const comparables = computed(() =>
