@@ -1212,16 +1212,134 @@ def api_delete_user():
 
 ### End endpoint should check that the user has a valid session. Otherwise, prompt user to log in again
 
-@app.route("/data")
-def get_data():
-    # Assume this dictionary already exists
+@app.route("/api/dashboard_info")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_dashboard_info():
+
     data = {
-        "name": "Alice",
-        "age": 25,
-        "skills": ["Python", "Flask", "JavaScript"]
+        "total_players": 7,
+        "transfers": 2,
+        "high_school": 5,
+        "avg_rating": 89
     }
 
     return jsonify(data)
+
+@app.route("/api/top_3_most_recent_recruits")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_top_3_most_recent_recruits():
+
+    players = [
+    {
+        "id": 1,
+        "name": "Evan Brooks",
+        "school": "St. Xavier",
+        "state": "OH",
+        "city": "Cincinnati",
+        "classYear": 2027,
+        "position": "QB",
+        "projectedPosition": "RPO Quarterback",
+        "type": "High School",
+        "height": "6'2\"",
+        "weight": 204,
+        "fortyTime": "4.68",
+        "gpa": 3.7,
+        "rating": 91,
+        "stars": 4,
+        "jersey": "#7",
+        "archetype": "Field Commander",
+        "summary": "Quick processor with strong middle-of-field accuracy and enough mobility to keep zone-read tags live.",
+        "explanation": "Best fit in a spread system that wants early-decision throws, designed movement, and efficient third-down answers.",
+        "notes": "High-volume thrower with clean mechanics. Coaches flagged leadership and poise as early separators.",
+        "schemeFit": 93,
+        "comparisonScore": 92,
+        "confidenceScore": 88,
+        "breakdown": {
+        "physical": 82,
+        "athletic": 79,
+        "production": 94,
+        "context": 87
+        },
+        "stats": {
+        "passingYards": 3248,
+        "touchdowns": 34,
+        "interceptions": 6,
+        "rushYards": 512
+        },
+        "topComparables": [4, 6, 7]
+    },
+    {
+        "id": 2,
+        "name": "Malik Dorsey",
+        "school": "Buford",
+        "state": "GA",
+        "city": "Buford",
+        "classYear": 2027,
+        "position": "WR",
+        "projectedPosition": "Boundary X Receiver",
+        "type": "High School",
+        "height": "6'3\"",
+        "weight": 196,
+        "fortyTime": "4.43",
+        "gpa": 3.4,
+        "rating": 94,
+        "stars": 4,
+        "jersey": "#1",
+        "archetype": "Vertical Winner",
+        "summary": "Explosive outside target who wins stacked releases, tracks the deep ball, and creates red-zone leverage.",
+        "explanation": "Prototype boundary receiver for an offense that wants isolated shot plays and a back-shoulder answer on money downs.",
+        "notes": "Elite acceleration off the line. Needs more polish on underneath pacing but already changes coverage structure.",
+        "schemeFit": 95,
+        "comparisonScore": 94,
+        "confidenceScore": 90,
+        "breakdown": {
+        "physical": 86,
+        "athletic": 94,
+        "production": 89,
+        "context": 85
+        },
+        "stats": {
+        "receptions": 71,
+        "receivingYards": 1284,
+        "touchdowns": 16,
+        "contestedCatchRate": "68%"
+        },
+        "topComparables": [5, 6, 4]
+    },
+    {
+        "id": 3,
+        "name": "Isaiah Ford",
+        "school": "IMG Academy",
+        "state": "FL",
+        "city": "Bradenton",
+        "classYear": 2027,
+        "position": "LB",
+        "projectedPosition": "Run-and-Chase Mike",
+        "type": "High School",
+        "height": "6'1\"",
+        "weight": 228,
+        "fortyTime": "4.59",
+        "gpa": 3.6,
+        "rating": 89,
+        "stars": 3,
+        "jersey": "#32",
+        "archetype": "Front-Seven Eraser",
+        "summary": "Trigger-fast second-level defender with strong pursuit angles and reliable finish technique.",
+        "explanation": "Profiles as a middle linebacker in pressure packages where range and closing speed matter more than pure size.",
+        "notes": "Very clean diagnostic tape. One of the safest defensive evaluations in the board.",
+        "schemeFit": 91,
+        "comparisonScore": 90,
+        "confidenceScore": 92,
+        "breakdown": {
+        "physical": 81,
+        "athletic": 90,
+        "production": 88,
+        "context": 89
+        }
+    }
+    ]
+
+    return jsonify(players)
 
 # =========================================================
 # Local Dev Entrypoint

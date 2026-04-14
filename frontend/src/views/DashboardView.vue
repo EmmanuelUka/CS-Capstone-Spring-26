@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { activityFeed } from '../data/mockRecruitingData'
@@ -8,18 +8,24 @@ import { useRecruitingStore } from '../store/useRecruitingStore'
 const router = useRouter()
 const { state } = useRecruitingStore()
 
-const transferPlayers = computed(() =>
-  state.players.filter((player) => player.type === 'Transfer')
-)
+// --- Dashboard stats from API ---
+const dashboardStats = ref(null)
+const statsLoading = ref(true)
+const statsError = ref(null)
 
-const highSchoolPlayers = computed(() =>
-  state.players.filter((player) => player.type === 'High School')
-)
+onMounted(async () => {
+  try {
+    const res = await fetch('api/dashboard_info')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    dashboardStats.value = await res.json()
+  } catch (err) {
+    statsError.value = err.message
+  } finally {
+    statsLoading.value = false
+  }
+})
 
-const averageRating = computed(() =>
-  Math.round(state.players.reduce((sum, player) => sum + player.rating, 0) / state.players.length)
-)
-
+// --- Remaining computed values (still from store) ---
 const featuredPlayers = computed(() => state.players.slice(0, 3))
 const shortlistSummaries = computed(() =>
   state.shortlists.map((list) => ({
@@ -42,27 +48,30 @@ const shortlistSummaries = computed(() =>
       <div class="stats-grid">
         <article class="stat-card">
           <span>Total Players</span>
-          <strong>{{ state.players.length }}</strong>
+          <strong>{{ statsLoading ? '—' : dashboardStats?.total_players ?? '—' }}</strong>
           <p>Current mock board under review.</p>
         </article>
         <article class="stat-card">
           <span>Transfers</span>
-          <strong>{{ transferPlayers.length }}</strong>
+          <strong>{{ statsLoading ? '—' : dashboardStats?.transfers ?? '—' }}</strong>
           <p>Portal prospects currently on the board.</p>
         </article>
         <article class="stat-card">
           <span>High School</span>
-          <strong>{{ highSchoolPlayers.length }}</strong>
+          <strong>{{ statsLoading ? '—' : dashboardStats?.high_school ?? '—' }}</strong>
           <p>Prep prospects currently tracked in the cycle.</p>
         </article>
         <article class="stat-card">
           <span>Avg Rating</span>
-          <strong>{{ averageRating }}</strong>
+          <strong>{{ statsLoading ? '—' : dashboardStats?.avg_rating ?? '—' }}</strong>
           <p>Board quality benchmark across the dataset.</p>
         </article>
       </div>
+
+      <p v-if="statsError" class="stats-error">Failed to load stats: {{ statsError }}</p>
     </section>
 
+    <!-- rest of template unchanged -->
     <section class="stack-panel surface-panel">
       <div class="panel-header">
         <div>
@@ -254,6 +263,12 @@ const shortlistSummaries = computed(() =>
   width: 2rem;
   height: 0.45rem;
   border-radius: 999px;
+}
+
+.stats-error {
+  margin-top: 0.5rem;
+  color: var(--error, #f87171);
+  font-size: 0.85rem;
 }
 
 @media (min-width: 880px) {
