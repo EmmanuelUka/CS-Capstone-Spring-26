@@ -1516,6 +1516,141 @@ def _average_score(scores):
     return round(sum(values) / len(values))
 
 
+def _normalize_example_player_id(player_id):
+    if isinstance(player_id, int):
+        return player_id
+    if isinstance(player_id, str) and player_id.isdigit():
+        return int(player_id)
+    return player_id
+
+
+def _build_historical_player(match):
+    return {
+        "id": match["historicalId"],
+        "isHistorical": True,
+        "name": match["name"],
+        "school": match["school"],
+        "state": match["conference"],
+        "city": "",
+        "classYear": match["lastSeason"],
+        "position": match["position"],
+        "projectedPosition": f"Historical {match['position']} Comparable",
+        "type": "Historical",
+        "height": "N/A",
+        "weight": None,
+        "fortyTime": "N/A",
+        "gpa": None,
+        "rating": _average_score(match.get("comparisonScores", {})),
+        "stars": 0,
+        "jersey": "HIST",
+        "archetype": "Historical Match",
+        "summary": f"Historical comparable from {match['school']} in the {match['conference']}.",
+        "explanation": "This record captures how closely the historical player matches the selected recruit profile.",
+        "notes": f"Most recent recorded season: {match['lastSeason']}. Historical player cards do not include related-athlete suggestions.",
+        "schemeFit": _average_score(match.get("comparisonScores", {})),
+        "comparisonScore": _average_score(match.get("comparisonScores", {})),
+        "confidenceScore": _average_score(match.get("comparisonScores", {})),
+        "breakdown": {
+            "physical": match.get("comparisonScores", {}).get("physical"),
+            "production": match.get("comparisonScores", {}).get("production"),
+            "context": match.get("comparisonScores", {}).get("context"),
+        },
+        "stats": {
+            "conference": match["conference"],
+            "lastSeason": match["lastSeason"],
+            "superScore": _average_score(match.get("comparisonScores", {})),
+        },
+        "topComparables": [],
+    }
+
+
+def _get_example_player(player_id):
+    normalized_player_id = _normalize_example_player_id(player_id)
+    for player in EXAMPLE_RECRUITING_PLAYERS:
+        if player.get("id") == normalized_player_id:
+            return player
+    return None
+
+
+def _get_historical_player(player_id):
+    normalized_player_id = _normalize_example_player_id(player_id)
+    for matches in EXAMPLE_HISTORICAL_MATCHES.values():
+        for match in matches:
+            if match.get("historicalId") == normalized_player_id:
+                return _build_historical_player(match)
+    return None
+
+
+def _get_example_display_player(player_id):
+    return _get_example_player(player_id) or _get_historical_player(player_id)
+
+
+def _get_example_comparables(player):
+    comparable_ids = player.get("topComparables", []) if player else []
+    comparables = []
+    for comparable_id in comparable_ids:
+        comparable = _get_example_player(comparable_id)
+        if comparable:
+            comparables.append(comparable)
+    return comparables
+
+
+def _get_example_historical_matches(player_id):
+    normalized_player_id = _normalize_example_player_id(player_id)
+    matches = EXAMPLE_HISTORICAL_MATCHES.get(normalized_player_id, [])
+    return [
+        {**match, "superScore": _average_score(match.get("comparisonScores", {}))}
+        for match in sorted(
+            matches,
+            key=lambda match: _average_score(match.get("comparisonScores", {})),
+            reverse=True,
+        )
+    ]
+
+
+def _filter_example_recruiting_players(args):
+    query = (args.get("query") or args.get("q") or "").strip().lower()
+    position = (args.get("position") or "All").strip()
+    state = (args.get("state") or "All").strip()
+    player_type = (args.get("type") or "All").strip()
+    rating_floor = args.get("ratingFloor", type=float)
+    exclude_id = args.get("excludeId")
+    limit = args.get("limit", type=int)
+
+    filtered_players = []
+    normalized_exclude_id = _normalize_example_player_id(exclude_id) if exclude_id else None
+
+    for player in EXAMPLE_RECRUITING_PLAYERS:
+        if normalized_exclude_id is not None and player.get("id") == normalized_exclude_id:
+            continue
+
+        if query:
+            haystack = " ".join(
+                str(player.get(field, "")) for field in ("name", "position", "school", "city", "state")
+            ).lower()
+            if query not in haystack:
+                continue
+
+        if position != "All" and player.get("position") != position:
+            continue
+
+        if state != "All" and player.get("state") != state:
+            continue
+
+        if player_type != "All" and player.get("type") != player_type:
+            continue
+
+        if rating_floor is not None and float(player.get("rating") or 0) < rating_floor:
+            continue
+
+        filtered_players.append(player)
+
+    if limit is not None and limit >= 0:
+        filtered_players = filtered_players[:limit]
+
+    return filtered_players
+
+
 def _build_example_recruiting_payload():
     total_players = len(EXAMPLE_RECRUITING_PLAYERS)
     transfers = sum(1 for player in EXAMPLE_RECRUITING_PLAYERS if player.get("type") == "Transfer")
@@ -1547,6 +1682,57 @@ def _build_example_recruiting_payload():
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_example_recruiting_data():
     return jsonify(_build_example_recruiting_payload())
+
+
+@app.route("/api/recruits")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_recruits():
+    players = _filter_example_recruiting_players(request.args)
+    return jsonify(
+        {
+            "players": players,
+            "positions": sorted({player.get("position") for player in EXAMPLE_RECRUITING_PLAYERS if player.get("position")}),
+            "states": sorted({player.get("state") for player in EXAMPLE_RECRUITING_PLAYERS if player.get("state")}),
+            "types": sorted({player.get("type") for player in EXAMPLE_RECRUITING_PLAYERS if player.get("type")}),
+            "total": len(players),
+        }
+    )
+
+
+@app.route("/api/recruits/<player_id>")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_recruit(player_id):
+    player = _get_example_display_player(player_id)
+    if not player:
+        return jsonify({"error": "player_not_found"}), 404
+
+    previous_player_id = None
+    next_player_id = None
+    if not player.get("isHistorical"):
+        for index, recruit in enumerate(EXAMPLE_RECRUITING_PLAYERS):
+            if recruit.get("id") == player.get("id"):
+                previous_player_id = EXAMPLE_RECRUITING_PLAYERS[index - 1]["id"] if index > 0 else None
+                next_player_id = (
+                    EXAMPLE_RECRUITING_PLAYERS[index + 1]["id"]
+                    if index < len(EXAMPLE_RECRUITING_PLAYERS) - 1
+                    else None
+                )
+                break
+
+    return jsonify(
+        {
+            "player": player,
+            "comparables": [] if player.get("isHistorical") else _get_example_comparables(player),
+            "previousPlayerId": previous_player_id,
+            "nextPlayerId": next_player_id,
+        }
+    )
+
+
+@app.route("/api/recruits/<player_id>/historical_matches")
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def get_recruit_historical_matches(player_id):
+    return jsonify(_get_example_historical_matches(player_id))
 
 @app.route("/api/dashboard_info")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import SearchableDropdown from '../components/SearchableDropdown.vue'
@@ -16,6 +16,7 @@ const {
   removePositionSlot,
   rosterPositions,
   getPlayerById,
+  ensurePlayersLoaded,
 } = useRecruitingStore()
 
 const form = ref({
@@ -77,6 +78,10 @@ function addSlotToList(shortlistId) {
 
   addPositionSlot(shortlistId, newSlotPosition.value)
 }
+
+onMounted(() => {
+  ensurePlayersLoaded().catch(() => {})
+})
 </script>
 
 <template>

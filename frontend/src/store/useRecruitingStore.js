@@ -1,7 +1,7 @@
-import { computed, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 
 import { EVAL_POSITIONS } from '../data/positionStats'
-import { normalizePlayerId, playerIdListIncludes, playerIdsMatch } from '../utils/playerIds'
+import { playerIdsMatch } from '../utils/playerIds'
 
 const STORAGE_KEY = 'hashmark-recruiting-prototype'
 
@@ -43,67 +43,6 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
-function averageScores(scores = {}) {
-  const values = Object.values(scores).filter((value) => typeof value === 'number')
-  if (!values.length) {
-    return 0
-  }
-
-  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
-}
-
-function createHistoricalPlayers(historicalMatchesByRecruitId = {}) {
-  return Object.values(historicalMatchesByRecruitId)
-    .flat()
-    .map((match) => ({
-      id: match.historicalId,
-      isHistorical: true,
-      name: match.name,
-      school: match.school,
-      state: match.conference,
-      city: '',
-      classYear: match.lastSeason,
-      position: match.position,
-      projectedPosition: `Historical ${match.position} Comparable`,
-      type: 'Historical',
-      height: 'N/A',
-      weight: null,
-      fortyTime: 'N/A',
-      gpa: null,
-      rating: averageScores(match.comparisonScores),
-      stars: 0,
-      jersey: 'HIST',
-      archetype: 'Historical Match',
-      summary: `Historical comparable from ${match.school} in the ${match.conference}.`,
-      explanation: 'This record captures how closely the historical player matches the selected recruit profile.',
-      notes: `Most recent recorded season: ${match.lastSeason}. Historical player cards do not include related-athlete suggestions.`,
-      schemeFit: averageScores(match.comparisonScores),
-      comparisonScore: averageScores(match.comparisonScores),
-      confidenceScore: averageScores(match.comparisonScores),
-      breakdown: {
-        physical: match.comparisonScores?.physical,
-        production: match.comparisonScores?.production,
-        context: match.comparisonScores?.context,
-      },
-      stats: {
-        conference: match.conference,
-        lastSeason: match.lastSeason,
-        superScore: averageScores(match.comparisonScores),
-      },
-      topComparables: [],
-    }))
-}
-
-function getHistoricalMatchesForData(historicalMatchesByRecruitId = {}, playerId) {
-  return [...(historicalMatchesByRecruitId[normalizePlayerId(playerId)] || [])]
-    .map((match) => ({
-      ...match,
-      superScore:
-        typeof match.superScore === 'number' ? match.superScore : averageScores(match.comparisonScores),
-    }))
-    .sort((left, right) => right.superScore - left.superScore)
-}
-
 function loadPersistedState() {
   if (typeof window === 'undefined') {
     return {}
@@ -115,14 +54,6 @@ function loadPersistedState() {
   } catch {
     return {}
   }
-}
-
-function createEmptySlots() {
-  return rosterPositions.map((position) => ({
-    id: `slot-${position.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`,
-    position,
-    playerId: null,
-  }))
 }
 
 function createSlotsForPositions(positions = []) {
@@ -198,22 +129,15 @@ refreshRosterPositions()
 
 const state = reactive({
   players: [],
-  historicalMatchesByRecruitId: {},
-  historicalPlayers: [],
   filters: {
     ...defaultFilters,
     ...normalizedPersistedFilters,
   },
   shortlists: (persisted.shortlists || []).map((list) => normalizeShortlist(list)),
   archetypes: persisted.archetypes || deepClone(defaultArchetypes),
-  compareSelection:
-    persisted.compareSelection && persisted.compareSelection.length
-      ? persisted.compareSelection
-      : [],
-  exampleDataLoaded: false,
-  exampleDataLoading: false,
-  exampleDataError: '',
-  ready: true,
+  playersLoaded: false,
+  playersLoading: false,
+  playersError: '',
 })
 
 if (typeof window !== 'undefined') {
@@ -222,7 +146,6 @@ if (typeof window !== 'undefined') {
       filters: state.filters,
       shortlists: state.shortlists,
       archetypes: state.archetypes,
-      compareSelection: state.compareSelection,
     }),
     (value) => {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
@@ -240,24 +163,6 @@ function setFilters(nextFilters) {
 
 function resetFilters() {
   state.filters = { ...defaultFilters }
-}
-
-function setCompareSelection(ids) {
-  const uniqueIds = [...new Set(ids.map(normalizePlayerId).filter((id) => getPlayerById(id)))]
-  state.compareSelection = uniqueIds
-}
-
-function toggleComparePlayer(playerId) {
-  const normalizedPlayerId = normalizePlayerId(playerId)
-
-  if (playerIdListIncludes(state.compareSelection, normalizedPlayerId)) {
-    state.compareSelection = state.compareSelection.filter(
-      (id) => !playerIdsMatch(id, normalizedPlayerId)
-    )
-    return
-  }
-
-  state.compareSelection = [...state.compareSelection, normalizedPlayerId]
 }
 
 function createShortlist({ name, color, positions }) {
@@ -298,50 +203,21 @@ function addPlayerToShortlist(shortlistId, position, playerId) {
   )
 }
 
-function hydrateExampleData(payload = {}) {
-  const nextPlayers = Array.isArray(payload.players) ? payload.players : []
-  const nextHistoricalMatches = payload.historicalMatches && typeof payload.historicalMatches === 'object'
-    ? Object.fromEntries(
-        Object.entries(payload.historicalMatches).map(([playerId, matches]) => [
-          normalizePlayerId(playerId),
-          Array.isArray(matches) ? matches : [],
-        ])
-      )
-    : {}
+let playersPromise = null
 
-  state.players = nextPlayers
-  refreshRosterPositions(nextPlayers)
-  state.historicalMatchesByRecruitId = nextHistoricalMatches
-  state.historicalPlayers = createHistoricalPlayers(nextHistoricalMatches)
-
-  const nextShortlists = persisted.shortlists
-    ? persisted.shortlists
-    : Array.isArray(payload.shortlists)
-      ? payload.shortlists
-      : []
-  state.shortlists = nextShortlists.map((list) => normalizeShortlist(list, nextPlayers))
-
-  state.compareSelection = state.compareSelection.filter((id) => getPlayerByIdFromList(nextPlayers, id))
-
-  state.exampleDataLoaded = true
-  state.exampleDataError = ''
-}
-
-let exampleDataPromise = null
-
-async function ensureExampleDataLoaded() {
-  if (state.exampleDataLoaded) {
-    return state
+async function ensurePlayersLoaded() {
+  if (state.playersLoaded) {
+    return state.players
   }
 
-  if (exampleDataPromise) {
-    return exampleDataPromise
+  if (playersPromise) {
+    return playersPromise
   }
 
-  state.exampleDataLoading = true
-  state.exampleDataError = ''
+  state.playersLoading = true
+  state.playersError = ''
 
-  exampleDataPromise = fetch('/api/example_recruiting_data', {
+  playersPromise = fetch('/api/recruits', {
     credentials: 'include',
   })
     .then(async (response) => {
@@ -350,40 +226,28 @@ async function ensureExampleDataLoaded() {
       }
 
       const payload = await response.json()
-      hydrateExampleData(payload)
-      return state
+      const nextPlayers = Array.isArray(payload.players) ? payload.players : []
+      state.players = nextPlayers
+      refreshRosterPositions(nextPlayers)
+      state.shortlists = state.shortlists.map((list) => normalizeShortlist(list, nextPlayers))
+      state.playersLoaded = true
+      state.playersError = ''
+      return nextPlayers
     })
     .catch((error) => {
-      state.exampleDataError = error.message || 'Unable to load example data'
-      state.exampleDataLoaded = true
-      return state
+      state.playersError = error.message || 'Unable to load players'
+      throw error
     })
     .finally(() => {
-      state.exampleDataLoading = false
-      exampleDataPromise = null
+      state.playersLoading = false
+      playersPromise = null
     })
 
-  return exampleDataPromise
+  return playersPromise
 }
 
 function getPlayerById(playerId) {
   return getPlayerByIdFromList(state.players, playerId)
-}
-
-function getHistoricalPlayerById(playerId) {
-  return state.historicalPlayers.find((player) => playerIdsMatch(player.id, playerId)) || null
-}
-
-function getDisplayPlayerById(playerId) {
-  return getPlayerById(playerId) || getHistoricalPlayerById(playerId)
-}
-
-function getComparables(player) {
-  return (player?.topComparables || []).map((id) => getPlayerById(id)).filter(Boolean)
-}
-
-function getHistoricalMatches(playerId) {
-  return getHistoricalMatchesForData(state.historicalMatchesByRecruitId, playerId)
 }
 
 function removePlayerFromShortlist(shortlistId, slotId) {
@@ -452,44 +316,13 @@ function deleteArchetype(archetypeId) {
   state.archetypes = state.archetypes.filter((archetype) => archetype.id !== archetypeId)
 }
 
-const filteredPlayers = computed(() =>
-  state.players.filter((player) => {
-    const query = state.filters.query.trim().toLowerCase()
-    const matchesQuery =
-      !query ||
-      [player.name, player.school, player.city]
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
-
-    const matchesPosition =
-      state.filters.position === 'All' || player.position === state.filters.position
-    const matchesState = state.filters.state === 'All' || player.state === state.filters.state
-    const matchesType = state.filters.type === 'All' || player.type === state.filters.type
-    const matchesRating = player.rating >= state.filters.ratingFloor
-
-    return matchesQuery && matchesPosition && matchesState && matchesType && matchesRating
-  })
-)
-
-const comparePlayers = computed(() =>
-  state.compareSelection.map((id) => getPlayerById(id)).filter(Boolean)
-)
-
 export function useRecruitingStore() {
   return {
     state,
-    filteredPlayers,
-    comparePlayers,
-    ensureExampleDataLoaded,
+    ensurePlayersLoaded,
     getPlayerById,
-    getDisplayPlayerById,
-    getComparables,
-    getHistoricalMatches,
     setFilters,
     resetFilters,
-    setCompareSelection,
-    toggleComparePlayer,
     createShortlist,
     deleteShortlist,
     addPlayerToShortlist,

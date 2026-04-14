@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import FilterPanel from '../components/FilterPanel.vue'
@@ -7,13 +7,63 @@ import PlayerCard from '../components/PlayerCard.vue'
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
 const router = useRouter()
-const { state, filteredPlayers, setFilters, rosterPositions } = useRecruitingStore()
+const { state, setFilters } = useRecruitingStore()
 
-const filterOptions = computed(() => ({
-  positions: ['All', ...rosterPositions],
-  states: ['All', ...new Set(state.players.map((player) => player.state))],
-  types: ['All', ...new Set(state.players.map((player) => player.type))],
-}))
+const players = ref([])
+const filterOptions = ref({
+  positions: ['All'],
+  states: ['All'],
+  types: ['All'],
+})
+const loading = ref(true)
+const error = ref('')
+
+async function loadPlayers() {
+  loading.value = true
+  error.value = ''
+
+  try {
+    const params = new URLSearchParams()
+    if (state.filters.query) params.set('query', state.filters.query)
+    if (state.filters.position !== 'All') params.set('position', state.filters.position)
+    if (state.filters.state !== 'All') params.set('state', state.filters.state)
+    if (state.filters.type !== 'All') params.set('type', state.filters.type)
+    if (state.filters.ratingFloor > 0) params.set('ratingFloor', String(state.filters.ratingFloor))
+
+    const queryString = params.toString()
+    const res = await fetch(`/api/recruits${queryString ? `?${queryString}` : ''}`, {
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const payload = await res.json()
+    players.value = Array.isArray(payload.players) ? payload.players : []
+    filterOptions.value = {
+      positions: ['All', ...(payload.positions || [])],
+      states: ['All', ...(payload.states || [])],
+      types: ['All', ...(payload.types || [])],
+    }
+  } catch (err) {
+    players.value = []
+    error.value = err.message || 'Unable to load players'
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => ({ ...state.filters }),
+  () => {
+    loadPlayers()
+  },
+  { deep: true }
+)
+
+onMounted(() => {
+  loadPlayers()
+})
 
 function updateFilters(nextFilters) {
   setFilters(nextFilters)
@@ -57,13 +107,23 @@ function comparePlayer(playerId) {
       <div class="results-header">
         <div>
           <p class="eyebrow section-label">Board Results</p>
-          <h3>{{ filteredPlayers.length }} players matched</h3>
+          <h3>{{ loading ? 'Loading players...' : `${players.length} players matched` }}</h3>
         </div>
       </div>
 
-      <div v-if="filteredPlayers.length" class="player-grid">
+      <div v-if="error" class="empty-state">
+        <strong>Failed to load players.</strong>
+        <p>{{ error }}</p>
+      </div>
+
+      <div v-else-if="loading" class="empty-state">
+        <strong>Loading players.</strong>
+        <p>Fetching the current board from the backend.</p>
+      </div>
+
+      <div v-else-if="players.length" class="player-grid">
         <PlayerCard
-          v-for="player in filteredPlayers"
+          v-for="player in players"
           :key="player.id"
           :player="player"
           compact

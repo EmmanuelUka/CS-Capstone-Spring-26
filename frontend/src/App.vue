@@ -1,12 +1,11 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import AuthView from './views/AuthView.vue'
 import TopMenuBar from './components/TopMenuBar.vue'
 import { useAuthSession } from './composables/useAuthSession'
 import { useRequestState } from './composables/useRequestState'
-import { useRecruitingStore } from './store/useRecruitingStore'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '◉' },
@@ -21,23 +20,12 @@ const router = useRouter()
 const route = useRoute()
 const { loading, authBusy, status, user, isAuthenticated, login, logout } = useAuthSession()
 const { isRequestPending } = useRequestState()
-const { ensureExampleDataLoaded } = useRecruitingStore()
 
 const currentPath = computed(() => route.path)
 
 function go(path) {
   router.push(path)
 }
-
-watch(
-  isAuthenticated,
-  (authenticated) => {
-    if (authenticated) {
-      ensureExampleDataLoaded()
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <template>

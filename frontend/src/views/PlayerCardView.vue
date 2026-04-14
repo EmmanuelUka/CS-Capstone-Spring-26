@@ -1,11 +1,9 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import PlayerCard from '../components/PlayerCard.vue'
 import ScoreBadge from '../components/ScoreBadge.vue'
-import { useRecruitingStore } from '../store/useRecruitingStore'
-import { playerIdsMatch } from '../utils/playerIds'
 
 const props = defineProps({
   playerId: {
@@ -15,12 +13,50 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const { state, getComparables, getDisplayPlayerById } = useRecruitingStore()
+const player = ref(null)
+const comparables = ref([])
+const previousPlayerId = ref(null)
+const nextPlayerId = ref(null)
+const loading = ref(true)
 
-const player = computed(() => getDisplayPlayerById(props.playerId))
-const comparables = computed(() =>
-  player.value && !player.value.isHistorical ? getComparables(player.value) : []
+async function loadPlayer() {
+  loading.value = true
+  player.value = null
+  comparables.value = []
+  previousPlayerId.value = null
+  nextPlayerId.value = null
+
+  try {
+    const res = await fetch(`/api/recruits/${props.playerId}`, {
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const payload = await res.json()
+    player.value = payload.player || null
+    comparables.value = Array.isArray(payload.comparables) ? payload.comparables : []
+    previousPlayerId.value = payload.previousPlayerId || null
+    nextPlayerId.value = payload.nextPlayerId || null
+  } catch {
+    player.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => props.playerId,
+  () => {
+    loadPlayer()
+  }
 )
+
+onMounted(() => {
+  loadPlayer()
+})
+
 const playerSubtitle = computed(() => {
   if (!player.value) {
     return ''
@@ -32,17 +68,6 @@ const playerSubtitle = computed(() => {
 
   return `${player.value.projectedPosition} • ${player.value.school} • Class of ${player.value.classYear}`
 })
-const playerIndex = computed(() =>
-  state.players.findIndex((entry) => playerIdsMatch(entry.id, props.playerId))
-)
-const previousPlayerId = computed(() =>
-  playerIndex.value > 0 ? state.players[playerIndex.value - 1].id : null
-)
-const nextPlayerId = computed(() =>
-  playerIndex.value >= 0 && playerIndex.value < state.players.length - 1
-    ? state.players[playerIndex.value + 1].id
-    : null
-)
 
 function openComparison(playerId) {
   router.push(`/compare?recruitId=${playerId}`)
@@ -54,7 +79,12 @@ function openPlayer(playerId) {
 </script>
 
 <template>
-  <section v-if="player" class="detail-layout">
+  <section v-if="loading" class="content-panel surface-panel">
+    <p class="eyebrow section-label">Player Card</p>
+    <h2>Loading player...</h2>
+  </section>
+
+  <section v-else-if="player" class="detail-layout">
     <div class="detail-main">
       <div class="page-header">
         <div>

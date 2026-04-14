@@ -2,10 +2,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { useRecruitingStore } from '../store/useRecruitingStore'
-
 const router = useRouter()
-const { state } = useRecruitingStore()
 
 // --- Dashboard stats from API ---
 const dashboardStats = ref(null)

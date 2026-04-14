@@ -1,9 +1,9 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 
 import { useRecruitingStore } from '../store/useRecruitingStore'
 
-const { state, rosterPositions, createArchetype, deleteArchetype } = useRecruitingStore()
+const { state, rosterPositions, createArchetype, deleteArchetype, ensurePlayersLoaded } = useRecruitingStore()
 
 const form = reactive({
   name: '',
@@ -108,6 +108,10 @@ const canSubmit = computed(() =>
       )
   )
 )
+
+onMounted(() => {
+  ensurePlayersLoaded().catch(() => {})
+})
 </script>
 
 <template>
