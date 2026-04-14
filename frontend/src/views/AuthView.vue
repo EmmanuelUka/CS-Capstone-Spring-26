@@ -1,4 +1,5 @@
 <script setup>
+import BackendObjectInspector from '../components/BackendObjectInspector.vue'
 import hashmarkLogo from '../assets/hashmark-logo.svg'
 
 defineProps({
@@ -52,12 +53,20 @@ defineEmits(['login'])
         <p v-if="status" class="auth-status">{{ status }}</p>
       </div>
     </div>
+
+    <BackendObjectInspector
+      class="auth-object-panel"
+      title="Sample Flask object"
+      description="This panel is already wired to a standalone Flask file on port 5001, so you can swap in your own object shape without touching the existing backend app."
+    />
   </section>
 </template>
 
 <style scoped>
 .auth-shell {
   width: min(1120px, 100%);
+  display: grid;
+  gap: 1rem;
 }
 
 .auth-grid {
@@ -152,6 +161,10 @@ defineEmits(['login'])
 .auth-status {
   min-height: 1.5rem;
   color: var(--brand-cool);
+}
+
+.auth-object-panel {
+  width: 100%;
 }
 
 @media (min-width: 900px) {
