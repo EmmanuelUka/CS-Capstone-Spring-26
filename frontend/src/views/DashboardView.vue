@@ -8,6 +8,9 @@ const router = useRouter()
 const dashboardStats = ref(null)
 const statsLoading = ref(true)
 const statsError = ref(null)
+const evaluateLoading = ref(false)
+const evaluateMessage = ref('')
+const evaluateError = ref('')
 
 // --- Remaining computed values (still from store) ---
 const featuredPlayers = ref(null);
@@ -15,17 +18,51 @@ let featuredPlayersLoaded = ref(false);
 
 const shortlistSummaries = ref([])
 
-onMounted(async () => {
-  //dashboard information
+async function loadDashboardStats() {
   try {
     const res = await fetch('api/dashboard_info')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     dashboardStats.value = await res.json()
+    statsError.value = null
   } catch (err) {
     statsError.value = err.message
   } finally {
     statsLoading.value = false
   }
+}
+
+async function evaluateAllRecruits() {
+  evaluateMessage.value = ''
+  evaluateError.value = ''
+  evaluateLoading.value = true
+
+  try {
+    const csrfRes = await fetch('/api/csrf', { credentials: 'include' })
+    if (!csrfRes.ok) throw new Error(`CSRF HTTP ${csrfRes.status}`)
+    const csrfPayload = await csrfRes.json()
+
+    const res = await fetch('/api/recruits/evaluate_all', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfPayload.csrfToken,
+      },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const data = await res.json()
+    evaluateMessage.value = `Evaluated ${data.evaluated}/${data.total} recruits${data.failed ? ` (${data.failed} failed)` : ''}.`
+    await loadDashboardStats()
+  } catch (err) {
+    evaluateError.value = err.message
+  } finally {
+    evaluateLoading.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadDashboardStats()
 
   //top 3 most recent recruits
   try {
@@ -66,6 +103,11 @@ onMounted(async () => {
       <p class="page-copy">
         Snapshot the active board, recent work, and the players most likely to move into the next decision window.
       </p>
+      <div class="hero-actions">
+        <button class="action-button" type="button" :disabled="evaluateLoading" @click="evaluateAllRecruits">
+          {{ evaluateLoading ? 'Evaluating...' : 'Evaluate All Recruits' }}
+        </button>
+      </div>
 
       <div class="stats-grid">
         <article class="stat-card">
@@ -91,6 +133,8 @@ onMounted(async () => {
       </div>
 
       <p v-if="statsError" class="stats-error">Failed to load stats: {{ statsError }}</p>
+      <p v-if="evaluateError" class="stats-error">Evaluate all failed: {{ evaluateError }}</p>
+      <p v-if="evaluateMessage" class="stats-success">{{ evaluateMessage }}</p>
     </section>
 
     <!-- rest of template unchanged -->
@@ -298,6 +342,33 @@ onMounted(async () => {
   margin-top: 0.5rem;
   color: var(--error, #f87171);
   font-size: 0.85rem;
+}
+
+.stats-success {
+  margin-top: 0.5rem;
+  color: #34d399;
+  font-size: 0.85rem;
+}
+
+.hero-actions {
+  margin-top: 0.25rem;
+}
+
+.action-button {
+  min-height: 2.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 183, 94, 0.16);
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (min-width: 880px) {

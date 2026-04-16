@@ -2371,6 +2371,39 @@ def delete_recruit(player_id):
 def get_recruit_historical_matches(player_id):
     return jsonify(_get_example_historical_matches(player_id))
 
+
+@app.route("/api/recruits/evaluate_all", methods=["POST"])
+@require_role("SUPER_ADMIN", "ADMIN", "COACH")
+def evaluate_all_recruits():
+    recruit_rows = _query_players(True, order_by="p.id ASC")
+    recruit_ids = [row["id"] for row in recruit_rows if row.get("id") is not None]
+
+    evaluated = 0
+    failed = 0
+    failures = []
+
+    for recruit_id in recruit_ids:
+        try:
+            result = _run_player_comparison(recruit_id)
+            if result is None:
+                failed += 1
+                failures.append({"playerId": recruit_id, "error": "evaluation_not_available"})
+            else:
+                evaluated += 1
+        except Exception as exc:
+            failed += 1
+            failures.append({"playerId": recruit_id, "error": str(exc)})
+
+    return jsonify(
+        {
+            "status": "ok",
+            "total": len(recruit_ids),
+            "evaluated": evaluated,
+            "failed": failed,
+            "failures": failures[:25],
+        }
+    )
+
 @app.route("/api/dashboard_info")
 @require_role("SUPER_ADMIN", "ADMIN", "COACH")
 def get_dashboard_info():
