@@ -357,7 +357,18 @@ def _comparable_context_multiplier(comp: CareerProfile) -> Optional[float]:
     Historical DB players are college players — use their conference tier.
     Treated as starters since they have recorded production stats.
     """
-    return TRANSFER_CONFERENCE_TIERS.get(comp.conference or "")
+    conf_mult = TRANSFER_CONFERENCE_TIERS.get(comp.conference or "")
+    if conf_mult is not None:
+        return conf_mult
+
+    # Fallback: if conference is unavailable, approximate context with
+    # home-state talent tier so context similarity can still contribute.
+    state_mult = HS_STATE_TIERS.get(comp.home_state or "")
+    if state_mult is not None:
+        return state_mult
+
+    # Last-resort neutral context value.
+    return 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +535,9 @@ def _eval_context(
     return ContextScore(
         recruit_multiplier=r_mult,
         comparable_multiplier=c_mult,
-        score=sim if sim is not None else 0.0,
+        # If either side has missing context signal after normalization,
+        # use a neutral midpoint instead of hard-zeroing the context term.
+        score=sim if sim is not None else 0.5,
         recruit_type=recruit.recruit_type,
     )
 
