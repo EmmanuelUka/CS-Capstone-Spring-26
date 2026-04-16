@@ -25,7 +25,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "data"))
 
-import eval_utility_flask as eval_api
 import hashmark_db as recruiting_db
 import playerEval as pe
 import player_metrics
